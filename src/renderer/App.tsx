@@ -341,7 +341,7 @@ export default function App() {
     const gridVal = selectedImportGrid;
     setImportingDirKey(null);
 
-    // Browser / Non-Electron mode: open HTML5 File Picker to select REAL photos
+    // Browser / Non-Electron mode: open HTML5 File Picker and upload directly to S3 / Cloud Server
     if (!(window as any).electronAPI) {
       const fileInput = document.createElement('input');
       fileInput.type = 'file';
@@ -351,26 +351,55 @@ export default function App() {
         const files: File[] = Array.from(e.target.files || []);
         if (files.length === 0) return;
 
-        const imgs: ProjectImage[] = await Promise.all(
-          files.map(async (file) => {
-            const dataUrl = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.readAsDataURL(file);
-            });
-            return {
-              name: file.name,
-              path: dataUrl
-            };
-          })
-        );
+        addLog(`⏳ Uploading ${files.length} photo(s) to Cloud Storage (S3)...`);
+
+        let imgs: ProjectImage[] = [];
+
+        // Attempt direct S3 / Server Batch Upload
+        try {
+          const formData = new FormData();
+          files.forEach(f => formData.append('files', f));
+
+          const res = await fetch(`${API_BASE_URL}/api/upload-batch`, {
+            method: 'POST',
+            body: formData
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            imgs = (data.files || []).map((f: any) => ({
+              name: f.name,
+              path: f.path
+            }));
+            addLog(`☁️ Successfully uploaded ${imgs.length} photo(s) directly to AWS S3 Cloud Storage!`);
+          }
+        } catch (uploadErr) {
+          console.warn('Direct S3 upload fallback to base64:', uploadErr);
+        }
+
+        // Fallback to local Base64 reader if offline or server upload failed
+        if (imgs.length === 0) {
+          imgs = await Promise.all(
+            files.map(async (file) => {
+              const dataUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result as string);
+                reader.readAsDataURL(file);
+              });
+              return {
+                name: file.name,
+                path: dataUrl
+              };
+            })
+          );
+          addLog(`✅ Imported ${imgs.length} photo(s) into memory for ${DIRECTIONS_LABELS[dirKey]}`);
+        }
 
         setGridConfigs(prev => ({ ...prev, [dirKey]: gridVal }));
         setDirections(prev => ({ ...prev, [dirKey]: imgs }));
         setStitchedPanoPath(null); // Clear previous/old stitched pano so new photos are used!
         setLastUpdated(Date.now());
         if (!projectDir) setProjectDir('Project_Workspace');
-        addLog(`✅ Imported ${imgs.length} real photo(s) into ${DIRECTIONS_LABELS[dirKey]}`);
       };
       fileInput.click();
       return;

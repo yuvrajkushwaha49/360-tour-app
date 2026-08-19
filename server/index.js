@@ -96,6 +96,49 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   });
 });
 
+// S3 Batch Image Upload Endpoint (For fast Studio multi-tile uploads)
+app.post('/api/upload-batch', upload.array('files', 100), async (req, res) => {
+  const files = req.files || [];
+  if (files.length === 0) {
+    return res.status(400).json({ error: 'No files provided.' });
+  }
+
+  const results = [];
+
+  for (const file of files) {
+    if (s3Client && S3_BUCKET) {
+      try {
+        const { PutObjectCommand } = require('@aws-sdk/client-s3');
+        const fileStream = fs.createReadStream(file.path);
+        const key = `uploads/${file.filename}`;
+        const ext = path.extname(file.originalname).toLowerCase();
+        const contentType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+
+        const uploadParams = {
+          Bucket: S3_BUCKET,
+          Key: key,
+          Body: fileStream,
+          ContentType: contentType
+        };
+
+        await s3Client.send(new PutObjectCommand(uploadParams));
+        fs.unlink(file.path, () => {});
+
+        const s3Url = `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key}`;
+        results.push({ name: file.originalname, path: s3Url, storage: 's3' });
+        continue;
+      } catch (err) {
+        console.error('[S3 Batch Upload Error]:', err.message);
+      }
+    }
+
+    // Local server storage fallback
+    results.push({ name: file.originalname, path: `/uploads/${file.filename}`, storage: 'local' });
+  }
+
+  res.json({ files: results });
+});
+
 // Serve uploaded images as static files with explicit CORS & CORP headers
 app.use('/uploads', cors(), express.static(UPLOADS_DIR, {
   setHeaders: (res) => {
