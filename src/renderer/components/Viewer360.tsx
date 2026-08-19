@@ -50,7 +50,9 @@ const TileMesh: React.FC<TileMeshProps> = ({ imagePath, position, rotation, size
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
   texture.anisotropy = 16;
-  texture.encoding = THREE.sRGBEncoding;
+  if ((THREE as any).SRGBColorSpace) {
+    texture.colorSpace = (THREE as any).SRGBColorSpace;
+  }
 
   return (
     <mesh position={position} rotation={rotation} onDoubleClick={onDoubleClick}>
@@ -78,7 +80,9 @@ const EquirectangularPano: React.FC<{ imagePath: string }> = ({ imagePath }) => 
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
   texture.anisotropy = 16;
-  texture.encoding = THREE.sRGBEncoding;
+  if ((THREE as any).SRGBColorSpace) {
+    texture.colorSpace = (THREE as any).SRGBColorSpace;
+  }
 
   return (
     <mesh scale={[-1, 1, 1]}>
