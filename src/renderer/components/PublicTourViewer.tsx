@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Globe, Share2, Copy, Check, ShieldAlert, Compass, Layers, Lock, ShieldCheck } from 'lucide-react';
 import Viewer360 from './Viewer360';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 interface PublicTourViewerProps {
   tourId: string;
@@ -34,7 +35,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     setIsPrivate(false);
     try {
       const token = localStorage.getItem('crm_token');
-      const response = await fetch(`http://localhost:5000/api/tours/${tourId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/tours/${tourId}`, {
         headers: {
           Authorization: token ? `Bearer ${token}` : ''
         }
@@ -74,7 +75,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const copyShareLink = () => {
-    const url = `http://localhost:5000/api/tours/${tourId}`;
+    const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
+    const url = `${base}/api/tours/${tourId}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

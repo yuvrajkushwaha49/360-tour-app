@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Mail, Lock, Layers, ShieldCheck, Sparkles } from 'lucide-react';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 interface ClientLoginPageProps {
   onSuccess: (user: { id: string; name: string; email: string; role: string }, token: string) => void;
@@ -21,7 +22,7 @@ export default function ClientLoginPage({ onSuccess, onBack }: ClientLoginPagePr
     const loginPassword = customPass || password;
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: loginEmail, password: loginPassword })

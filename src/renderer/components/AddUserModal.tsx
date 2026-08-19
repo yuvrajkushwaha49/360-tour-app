@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, UserPlus, Mail, User, Lock, ShieldCheck, CheckCircle2, Building2, Sparkles } from 'lucide-react';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 interface AddUserModalProps {
   isOpen: boolean;
@@ -24,7 +25,7 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:5000/api/users/add', {
+      const response = await fetch(`${API_BASE_URL}/api/users/add`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

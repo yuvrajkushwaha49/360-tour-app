@@ -1,3 +1,5 @@
+import { API_BASE_URL } from './apiConfig';
+
 export interface ExportProgressCallback {
   (message: string, progressPercent: number): void;
 }
@@ -46,10 +48,10 @@ export async function exportProjectToZip(
     let fetchUrl = rawImgPath;
     if (!rawImgPath.startsWith('http://') && !rawImgPath.startsWith('https://') && !rawImgPath.startsWith('data:')) {
       if (rawImgPath.startsWith('/uploads/')) {
-        fetchUrl = `http://localhost:5000${rawImgPath}`;
+        fetchUrl = `${API_BASE_URL}${rawImgPath}`;
       } else {
         const cleanPath = rawImgPath.replace(/^file:\/\/\/?/, '');
-        fetchUrl = `http://localhost:5000/api/local-image?path=${encodeURIComponent(cleanPath)}`;
+        fetchUrl = `${API_BASE_URL}/api/local-image?path=${encodeURIComponent(cleanPath)}`;
       }
     }
     if (rawImgPath.startsWith('data:')) {

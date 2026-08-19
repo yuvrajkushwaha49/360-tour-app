@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Lock, Mail, ShieldCheck, LogIn } from 'lucide-react';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -22,7 +23,7 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })

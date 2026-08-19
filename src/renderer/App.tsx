@@ -38,6 +38,7 @@ import PublicTourViewer from './components/PublicTourViewer';
 import AddUserModal from './components/AddUserModal';
 import ClientLoginPage from './components/ClientLoginPage';
 import { exportProjectToZip } from './utils/exportZip';
+import { API_BASE_URL } from './utils/apiConfig';
 
 interface ProjectImage {
   name: string;
@@ -477,7 +478,7 @@ export default function App() {
     let token = authToken || localStorage.getItem('crm_token');
     if (!token) {
       try {
-        const loginRes = await fetch('http://localhost:5000/api/auth/login', {
+        const loginRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: 'admin@360soft.com', password: 'admin123' })
@@ -496,7 +497,7 @@ export default function App() {
 
     if (token) {
       try {
-        await fetch('http://localhost:5000/api/projects', {
+        await fetch(`${API_BASE_URL}/api/projects`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -527,7 +528,7 @@ export default function App() {
 
     if (authToken) {
       try {
-        const res = await fetch('http://localhost:5000/api/users', {
+        const res = await fetch(`${API_BASE_URL}/api/users`, {
           headers: { Authorization: `Bearer ${authToken}` }
         });
         if (res.ok) {
@@ -551,7 +552,7 @@ export default function App() {
 
     if (authToken) {
       try {
-        const res = await fetch('http://localhost:5000/api/users', {
+        const res = await fetch(`${API_BASE_URL}/api/users`, {
           headers: { Authorization: `Bearer ${authToken}` }
         });
         if (res.ok) {
@@ -816,7 +817,7 @@ export default function App() {
     // If not logged in yet, authenticate as default Admin in the background
     if (!token) {
       try {
-        const loginRes = await fetch('http://localhost:5000/api/auth/login', {
+        const loginRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: 'admin@360soft.com', password: 'admin123' })
@@ -840,8 +841,8 @@ export default function App() {
     if (token) {
       try {
         const endpoint = projId
-          ? `http://localhost:5000/api/projects/${projId}`
-          : 'http://localhost:5000/api/projects';
+          ? `${API_BASE_URL}/api/projects/${projId}`
+          : `${API_BASE_URL}/api/projects`;
         const method = projId ? 'PUT' : 'POST';
 
         const res = await fetch(endpoint, {
@@ -950,7 +951,7 @@ export default function App() {
 
     if (currentUser.role === 'admin') {
       try {
-        const res = await fetch('http://localhost:5000/api/users', {
+        const res = await fetch(`${API_BASE_URL}/api/users`, {
           headers: { Authorization: `Bearer ${authToken}` }
         });
         if (res.ok) {
@@ -995,7 +996,7 @@ export default function App() {
     };
 
     try {
-      const response = await fetch('http://localhost:5000/api/projects', {
+      const response = await fetch(`${API_BASE_URL}/api/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1229,7 +1230,7 @@ export default function App() {
             onClick={async () => {
               if (!currentUser || !authToken) {
                 try {
-                  const loginRes = await fetch('http://localhost:5000/api/auth/login', {
+                  const loginRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: 'admin@360soft.com', password: 'admin123' })

@@ -26,6 +26,7 @@ import {
   Archive
 } from 'lucide-react';
 import { exportProjectToZip } from '../utils/exportZip';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 interface ProjectItem {
   id: string;
@@ -123,7 +124,7 @@ export default function ClientDashboard({
     let serverProjects: ProjectItem[] = [];
 
     try {
-      const response = await fetch('http://localhost:5000/api/projects', {
+      const response = await fetch(`${API_BASE_URL}/api/projects`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.status === 401 || response.status === 403) {
@@ -161,7 +162,7 @@ export default function ClientDashboard({
   const fetchUsers = async () => {
     setUsersLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/users', {
+      const response = await fetch(`${API_BASE_URL}/api/users`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
@@ -200,7 +201,7 @@ export default function ClientDashboard({
     };
 
     try {
-      const response = await fetch(`http://localhost:5000/api/projects/${editingProject.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/projects/${editingProject.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -257,7 +258,7 @@ export default function ClientDashboard({
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/projects/${project.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/projects/${project.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -283,7 +284,7 @@ export default function ClientDashboard({
   const deleteProject = async (id: string) => {
     if (!confirm('Are you sure you want to delete this 360 tour project?')) return;
     try {
-      await fetch(`http://localhost:5000/api/projects/${id}`, {
+      await fetch(`${API_BASE_URL}/api/projects/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -301,7 +302,8 @@ export default function ClientDashboard({
   };
 
   const copyShareLink = (tourId: string) => {
-    const url = `http://localhost:5000/api/tours/${tourId}`;
+    const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
+    const url = `${base}/api/tours/${tourId}`;
     navigator.clipboard.writeText(url);
     setCopiedId(tourId);
     setTimeout(() => setCopiedId(null), 2500);

@@ -3,6 +3,7 @@ import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { RotateCw, ZoomIn, ZoomOut, Maximize2, Compass, Play, Pause, PlusCircle, XCircle, CheckCircle, MapPin, ArrowUpCircle, Info } from 'lucide-react';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 interface ProjectImage {
   name: string;
@@ -38,10 +39,10 @@ const TileMesh: React.FC<TileMeshProps> = ({ imagePath, position, rotation, size
   } else if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('data:')) {
     resolvedUrl = imagePath;
   } else if (imagePath.startsWith('/uploads/')) {
-    resolvedUrl = `http://localhost:5000${imagePath}`;
+    resolvedUrl = `${API_BASE_URL}${imagePath}`;
   } else {
     const cleanPath = imagePath.replace(/^file:\/\/\/?/, '');
-    resolvedUrl = `http://localhost:5000/api/local-image?path=${encodeURIComponent(cleanPath)}`;
+    resolvedUrl = `${API_BASE_URL}/api/local-image?path=${encodeURIComponent(cleanPath)}`;
   }
 
   const texture = useLoader(THREE.TextureLoader, resolvedUrl);
@@ -66,10 +67,10 @@ const EquirectangularPano: React.FC<{ imagePath: string }> = ({ imagePath }) => 
   } else if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('data:')) {
     resolvedUrl = imagePath;
   } else if (imagePath.startsWith('/uploads/')) {
-    resolvedUrl = `http://localhost:5000${imagePath}`;
+    resolvedUrl = `${API_BASE_URL}${imagePath}`;
   } else {
     const cleanPath = imagePath.replace(/^file:\/\/\/?/, '');
-    resolvedUrl = `http://localhost:5000/api/local-image?path=${encodeURIComponent(cleanPath)}`;
+    resolvedUrl = `${API_BASE_URL}/api/local-image?path=${encodeURIComponent(cleanPath)}`;
   }
 
   const texture = useLoader(THREE.TextureLoader, resolvedUrl);
@@ -990,10 +991,10 @@ export const Viewer360: React.FC<Viewer360Props> = ({
         return pathStr;
       }
       if (pathStr.startsWith('/uploads/')) {
-        return `http://localhost:5000${pathStr}`;
+        return `${API_BASE_URL}${pathStr}`;
       }
       const cleanPath = pathStr.replace(/^file:\/\/\/?/, '');
-      return `http://localhost:5000/api/local-image?path=${encodeURIComponent(cleanPath)}`;
+      return `${API_BASE_URL}/api/local-image?path=${encodeURIComponent(cleanPath)}`;
     };
 
     if (stitchedPanoPath) {
