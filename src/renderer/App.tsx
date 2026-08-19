@@ -39,6 +39,7 @@ import AddUserModal from './components/AddUserModal';
 import ClientLoginPage from './components/ClientLoginPage';
 import { exportProjectToZip } from './utils/exportZip';
 import { API_BASE_URL } from './utils/apiConfig';
+import { saveLargeDraft, loadLargeDraft, safeLocalStorageSet, safeLocalStorageGet } from './utils/dbStorage';
 
 interface ProjectImage {
   name: string;
@@ -92,25 +93,19 @@ interface LocationItem {
 
 export default function App() {
   const [projectDir, setProjectDir] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('studio_draft_project');
-      return saved ? JSON.parse(saved).projectDir || '' : '';
-    } catch (e) { return ''; }
+    const saved = safeLocalStorageGet<any>('studio_draft_project');
+    return saved ? saved.projectDir || '' : '';
   });
 
-  // Locations management with localStorage auto-draft restoration
+  // Locations management with localStorage / IndexedDB auto-draft restoration
   const [locations, setLocations] = useState<LocationItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('studio_draft_project');
-      return saved ? JSON.parse(saved).locations || [] : [];
-    } catch (e) { return []; }
+    const saved = safeLocalStorageGet<any>('studio_draft_project');
+    return saved ? saved.locations || [] : [];
   });
 
   const [activeLocationId, setActiveLocationId] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('studio_draft_project');
-      return saved ? JSON.parse(saved).activeLocationId || '' : '';
-    } catch (e) { return ''; }
+    const saved = safeLocalStorageGet<any>('studio_draft_project');
+    return saved ? saved.activeLocationId || '' : '';
   });
   const [newLocationName, setNewLocationName] = useState<string>('');
 
@@ -139,7 +134,22 @@ export default function App() {
   const [blendingMode, setBlendingMode] = useState<string>('multi-band');
   const [exposureCorrection, setExposureCorrection] = useState<boolean>(true);
 
-  // Auto-save Studio project draft state to localStorage on every change
+  // Restore draft project on mount from high-capacity IndexedDB
+  useEffect(() => {
+    loadLargeDraft('studio_draft_project').then((saved) => {
+      if (saved) {
+        if (!projectDir && saved.projectDir) setProjectDir(saved.projectDir);
+        if (locations.length === 0 && saved.locations && saved.locations.length > 0) {
+          setLocations(saved.locations);
+        }
+        if (!activeLocationId && saved.activeLocationId) {
+          setActiveLocationId(saved.activeLocationId);
+        }
+      }
+    });
+  }, []);
+
+  // Auto-save Studio project draft state to IndexedDB safely on every change
   useEffect(() => {
     if (locations.length > 0 || projectDir) {
       const draftData = {
@@ -152,7 +162,7 @@ export default function App() {
         exposureCorrection,
         lastUpdated: Date.now()
       };
-      localStorage.setItem('studio_draft_project', JSON.stringify(draftData));
+      saveLargeDraft('studio_draft_project', draftData);
     }
   }, [locations, activeLocationId, projectDir, resolution, featureDetector, blendingMode, exposureCorrection]);
 
@@ -455,7 +465,7 @@ export default function App() {
       exposureCorrection: true,
       lastUpdated: Date.now()
     };
-    localStorage.setItem('studio_draft_project', JSON.stringify(draftData));
+    saveLargeDraft('studio_draft_project', draftData);
 
     // 3. Register immediately in local storage registry
     let user = currentUser || (localStorage.getItem('crm_user') ? JSON.parse(localStorage.getItem('crm_user')!) : null);
@@ -471,7 +481,7 @@ export default function App() {
         data: initialProjectData
       };
       localList.unshift(newProjItem);
-      localStorage.setItem('local_saved_projects', JSON.stringify(localList));
+      safeLocalStorageSet('local_saved_projects', JSON.stringify(localList));
     } catch (e) {}
 
     // 4. Save into SQLite backend database
@@ -893,7 +903,7 @@ export default function App() {
       exposureCorrection,
       lastUpdated: Date.now()
     };
-    localStorage.setItem('studio_draft_project', JSON.stringify(draftData));
+    saveLargeDraft('studio_draft_project', draftData);
 
     // Save to local registry so it's always visible on Home Page
     try {
@@ -913,7 +923,7 @@ export default function App() {
       } else {
         localList.unshift(newProjItem);
       }
-      localStorage.setItem('local_saved_projects', JSON.stringify(localList));
+      safeLocalStorageSet('local_saved_projects', JSON.stringify(localList));
     } catch (e) {}
 
     addLog(`💾 Project "${projName}" saved to file and synced to Home Page!`);
