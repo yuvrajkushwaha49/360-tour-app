@@ -1,0 +1,46 @@
+{
+  "name": "360-panorama-studio",
+  "version": "1.0.0",
+  "description": "Professional 360 Panorama and Virtual Tour Studio",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "clean:ports": "node server/clean.js",
+    "predev": "node server/clean.js",
+    "predev:web": "node server/clean.js",
+    "dev:renderer": "vite",
+    "dev:web": "start /B node server/index.js && vite --host",
+    "build:renderer": "vite build",
+    "build:electron": "tsc src/main/main.ts src/main/preload.ts --outDir dist-electron --target es2022 --module commonjs --skipLibCheck",
+    "dev": "npm run build:electron && start /B node server/index.js && start /B vite && electron .",
+    "build": "npm run build:renderer && npm run build:electron",
+    "package": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.109.2",
+    "@react-three/fiber": "^8.16.8",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^0.424.0",
+    "multer": "^2.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sqlite3": "^6.0.1",
+    "three": "^0.166.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/three": "^0.166.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.5.4",
+    "electron": "^31.2.0",
+    "electron-builder": "^24.13.3",
+    "postcss": "^8.5.25",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.3"
+  }
+}

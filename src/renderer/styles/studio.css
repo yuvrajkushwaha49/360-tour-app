@@ -1,0 +1,219 @@
+/* ======================================================
+   360 Panorama Studio Mode External Styles (Bootstrap 5)
+   ====================================================== */
+
+.studio-navbar {
+  background-color: #0e1017;
+  border-bottom: 1px solid #1f2434;
+  height: 52px;
+  min-height: 52px;
+  padding: 0 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+.studio-logo {
+  font-weight: 700;
+  font-size: 1.05rem;
+  background: linear-gradient(135deg, #ffffff, #818cf8, #38bdf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  white-space: nowrap;
+}
+
+.mode-switch-pill {
+  background-color: #11131a;
+  border: 1px solid #1f2434;
+  border-radius: 0.6rem;
+  padding: 0.2rem;
+  display: inline-flex;
+  gap: 0.2rem;
+}
+
+.mode-tab-btn {
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: none;
+  color: #94a3b8;
+  background: transparent;
+  transition: all 0.2s ease-in-out;
+  white-space: nowrap;
+}
+
+.mode-tab-btn.active-studio {
+  background-color: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
+.mode-tab-btn.active-crm {
+  background-color: #9333ea;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(147, 51, 234, 0.4);
+}
+
+.studio-main-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr 340px;
+  height: calc(100vh - 52px);
+  overflow: hidden;
+}
+
+.studio-center-viewport {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  background-color: #07080d;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.studio-sidebar {
+  background-color: #11131a;
+  border-right: 1px solid #1f2434;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.studio-sidebar-right {
+  border-right: none;
+  border-left: 1px solid #1f2434;
+}
+
+.sidebar-header {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #1f2434;
+  background: rgba(24, 27, 38, 0.7);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-body {
+  padding: 0.85rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Custom Styled Dark Select Dropdown */
+.studio-select {
+  background-color: #181b26 !important;
+  color: #ffffff !important;
+  border: 1px solid #242938 !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.8rem !important;
+  padding: 0.45rem 0.75rem !important;
+}
+
+.studio-select:focus {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+}
+
+/* Direction Face Grid Card */
+.direction-face-card {
+  background: #161822;
+  border: 1px solid #222636;
+  border-radius: 0.6rem;
+  padding: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.direction-face-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.direction-face-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+/* Compact 4-Column Image Grid */
+.image-list-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.image-thumb-card {
+  aspect-ratio: 1;
+  background: #1e2230;
+  border: 1px solid #2a3045;
+  border-radius: 0.35rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.image-thumb-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.75);
+  font-size: 0.6rem;
+  color: #cbd5e1;
+  padding: 1px 2px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Export Option Links as Buttons */
+.btn-export-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.85rem;
+  background: #181b26;
+  border: 1px solid #242938;
+  border-radius: 0.5rem;
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+  margin-bottom: 0.4rem;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.btn-export-link:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: #6366f1;
+  color: #ffffff;
+}
+
+/* 3D Viewer Overlays */
+.viewer-overlay-toolbar {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  background: rgba(17, 19, 26, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.5rem 1rem;
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}

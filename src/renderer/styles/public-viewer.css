@@ -1,0 +1,114 @@
+/* ======================================================
+   360 Public Tour Interactive Viewer External Styles
+   ====================================================== */
+
+.public-viewer-page {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #000000;
+  overflow: hidden;
+  z-index: 9999;
+  user-select: none;
+}
+
+/* 360 Fullscreen Canvas Area */
+.public-viewer-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* Overlaid Top Header Glass Navbar */
+.public-viewer-header {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  right: 1rem;
+  height: 4rem;
+  z-index: 100;
+  background: rgba(15, 18, 28, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.25rem;
+  padding: 0 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+}
+
+.public-viewer-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0;
+  color: #ffffff;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.public-viewer-subtitle {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 0.1rem;
+  margin-bottom: 0;
+}
+
+/* Overlaid Bottom Room Selector Carousel */
+.public-viewer-room-bar {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: rgba(15, 18, 28, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.25rem;
+  padding: 0.5rem 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 92vw;
+  overflow-x: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+}
+
+.room-tab-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.room-tab-btn.active {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: #ffffff;
+  border-color: rgba(168, 85, 247, 0.4);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+}
+
+.room-tab-btn.inactive {
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+}
+
+.room-tab-btn.inactive:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
