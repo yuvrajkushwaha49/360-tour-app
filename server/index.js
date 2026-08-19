@@ -162,8 +162,15 @@ app.get('/api/local-image', cors(), (req, res) => {
   }
 
   if (!fs.existsSync(targetPath)) {
-    console.warn(`[404 Local Image Not Found]: ${targetPath}`);
-    return res.status(404).json({ error: `File not found: ${targetPath}` });
+    // Return clean fallback 1x1 placeholder so Three.js TextureLoader never errors on missing local PC paths
+    const placeholderPng = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64'
+    );
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    return res.send(placeholderPng);
   }
 
   res.setHeader('Access-Control-Allow-Origin', '*');
