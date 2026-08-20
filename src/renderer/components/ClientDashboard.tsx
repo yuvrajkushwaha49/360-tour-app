@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { exportProjectToZip } from '../utils/exportZip';
 import { API_BASE_URL } from '../utils/apiConfig';
+import { loadLargeDraft } from '../utils/dbStorage';
 
 interface ProjectItem {
   id: string;
@@ -35,6 +36,7 @@ interface ProjectItem {
   client_name?: string;
   client_email?: string;
   is_public: boolean;
+  is_draft?: boolean;
   created_at?: string;
   data: {
     description?: string;
@@ -140,20 +142,49 @@ export default function ClientDashboard({
       console.warn('Server project fetch error, falling back to local registry:', err);
     }
 
-    // Merge with local projects saved from Studio Mode
+    // Merge with local projects and in-progress drafts ONLY if current user is Admin!
     let localList: ProjectItem[] = [];
-    try {
-      const localStr = localStorage.getItem('local_saved_projects');
-      if (localStr) localList = JSON.parse(localStr);
-    } catch (e) {}
+    if (user.role === 'admin') {
+      try {
+        const localStr = localStorage.getItem('local_saved_projects');
+        if (localStr) localList = JSON.parse(localStr);
+      } catch (e) {}
+
+      // Check for current in-progress unsaved Studio Draft
+      try {
+        const draft = await loadLargeDraft<any>('studio_draft_project');
+        if (draft && draft.locations && draft.locations.length > 0) {
+          const draftProject: ProjectItem = {
+            id: 'studio-draft-in-progress',
+            user_id: user.id,
+            name: draft.projectDir ? `${draft.projectDir} (Unfinished Draft)` : 'Unfinished 360 Studio Draft',
+            is_public: false,
+            is_draft: true,
+            created_at: new Date(draft.lastUpdated || Date.now()).toISOString(),
+            data: {
+              description: '⚡ In-progress draft currently being stitched/configured in Studio Mode.',
+              locations: draft.locations,
+              activeLocationId: draft.activeLocationId,
+              resolution: draft.resolution
+            }
+          };
+          const alreadyExists = localList.some(lp => lp.id === draftProject.id || lp.name === draftProject.name);
+          if (!alreadyExists) {
+            localList.unshift(draftProject);
+          }
+        }
+      } catch (e) {}
+    }
 
     const combined = [...serverProjects];
-    localList.forEach(lp => {
-      const exists = combined.some(sp => sp.id === lp.id || sp.name === lp.name);
-      if (!exists) {
-        combined.push(lp);
-      }
-    });
+    if (user.role === 'admin') {
+      localList.forEach(lp => {
+        const exists = combined.some(sp => sp.id === lp.id || sp.name === lp.name);
+        if (!exists) {
+          combined.push(lp);
+        }
+      });
+    }
 
     setProjects(combined);
     setLoading(false);
@@ -704,7 +735,11 @@ export default function ClientDashboard({
                           </div>
 
                           <div className="position-absolute top-0 start-0 m-3 z-2">
-                            {project.is_public ? (
+                            {project.is_draft ? (
+                              <span className="badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-30 rounded-pill px-2.5 py-1.5 font-weight-normal">
+                                ⚡ Incomplete Draft
+                              </span>
+                            ) : project.is_public ? (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -729,12 +764,18 @@ export default function ClientDashboard({
 
                           {/* Hover Launch Overlay */}
                           <div
-                            onClick={() => onLaunchPublicView(project.id)}
+                            onClick={() => {
+                              if (project.is_draft) {
+                                onOpenProject(project);
+                              } else {
+                                onLaunchPublicView(project.id);
+                              }
+                            }}
                             className="project-card-header-overlay cursor-pointer"
                           >
                             <button className="btn btn-primary font-weight-normal rounded-3 px-4 py-2 small shadow-lg d-flex align-items-center gap-2">
                               <Eye className="w-4 h-4" />
-                              <span>Launch 360° Viewer</span>
+                              <span>{project.is_draft ? 'Resume in Studio' : 'Launch 360° Viewer'}</span>
                             </button>
                           </div>
                         </div>

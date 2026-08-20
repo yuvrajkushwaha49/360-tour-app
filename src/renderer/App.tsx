@@ -192,8 +192,7 @@ export default function App() {
     }
 
     try {
-      const parsed = JSON.parse(savedUser);
-      return parsed.role === 'client' ? 'crm' : 'studio';
+      return 'crm';
     } catch (e) {
       return 'login';
     }
@@ -964,8 +963,8 @@ export default function App() {
     localStorage.setItem('crm_user', JSON.stringify(user));
     localStorage.setItem('crm_token', token);
 
-    const targetView = user.role === 'client' ? 'crm' : 'studio';
-    handleViewChange(targetView);
+    // Always redirect to CRM Portal upon login
+    handleViewChange('crm');
     addLog(`Logged in as ${user.name} (${user.role.toUpperCase()})`);
   };
 
