@@ -675,13 +675,11 @@ export default function App() {
           };
         } else {
           // Existing Room Mode
+          if (!selectedTargetId) {
+            alert('⚠️ Please select an existing room from the dropdown list.');
+            return;
+          }
           targetId = selectedTargetId;
-          if (!targetId && otherRooms.length > 0) {
-            targetId = otherRooms[0].id;
-          }
-          if (!targetId && locations.length > 0) {
-            targetId = locations.find(l => l.id !== activeLocationId)?.id || locations[0].id;
-          }
         }
       }
 
@@ -1854,7 +1852,10 @@ export default function App() {
                                 type="radio"
                                 name="hotspot-mode"
                                 checked={hotspotMode === 'new'}
-                                onChange={() => setHotspotMode('new')}
+                                onChange={() => {
+                                  setHotspotMode('new');
+                                  setSelectedTargetId('');
+                                }}
                               />
                               Create New Room
                             </label>
@@ -1874,10 +1875,9 @@ export default function App() {
                                 checked={hotspotMode === 'existing'}
                                 onChange={() => {
                                   setHotspotMode('existing');
-                                  const others = locations.filter(l => l.id !== activeLocationId);
-                                  if (others.length > 0) {
-                                    setSelectedTargetId(others[0].id);
-                                    if (!newLinkRoomName.trim()) setNewLinkRoomName(others[0].name);
+                                  if (selectedTargetId) {
+                                    const loc = locations.find(l => l.id === selectedTargetId);
+                                    if (loc) setNewLinkRoomName(loc.name);
                                   }
                                 }}
                               />
@@ -1891,18 +1891,26 @@ export default function App() {
                             </div>
                           ) : (
                             <div className="form-group" style={{ margin: 0 }}>
-                              <label className="form-label">Select existing Room</label>
+                              <label className="form-label">Select existing Room *</label>
                               <select
                                 className="form-select"
-                                value={selectedTargetId || (locations.filter(l => l.id !== activeLocationId)[0]?.id || '')}
+                                value={selectedTargetId}
                                 onChange={(e) => {
-                                  setSelectedTargetId(e.target.value);
-                                  const loc = locations.find(l => l.id === e.target.value);
-                                  if (loc && !newLinkRoomName.trim()) setNewLinkRoomName(loc.name);
+                                  const chosenId = e.target.value;
+                                  setSelectedTargetId(chosenId);
+                                  if (chosenId) {
+                                    const loc = locations.find(l => l.id === chosenId);
+                                    if (loc) {
+                                      setNewLinkRoomName(loc.name);
+                                    }
+                                  } else {
+                                    setNewLinkRoomName('');
+                                  }
                                 }}
                               >
+                                <option value="">-- Please select a room --</option>
                                 {locations.filter(l => l.id !== activeLocationId).map(loc => (
-                                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                  <option key={loc.id} value={loc.id}>📍 {loc.name}</option>
                                 ))}
                               </select>
                             </div>
