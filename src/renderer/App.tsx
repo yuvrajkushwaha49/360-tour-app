@@ -654,121 +654,134 @@ export default function App() {
   };
 
   const handleLinkHotspot = () => {
-    let targetId: string | undefined = undefined;
-    let newLocationToAppend: LocationItem | null = null;
+    try {
+      let targetId: string | undefined = undefined;
+      let newLocationToAppend: LocationItem | null = null;
 
-    if (linkToRoom) {
-      if (hotspotMode === 'new') {
-        const roomName = newLinkRoomName.trim() || 'New Room';
-        targetId = `loc-${Date.now()}`;
+      const otherRooms = locations.filter(l => l.id !== activeLocationId);
 
-        newLocationToAppend = {
-          id: targetId,
-          name: roomName,
-          directions: { F: [], B: [], L: [], R: [], U: [], D: [] },
-          gridConfigs: { F: 'auto', B: 'auto', L: 'auto', R: 'auto', U: 'auto', D: 'auto' },
-          stitchedPanoPath: null,
-          hotspots: []
-        };
-      } else {
-        const otherRooms = locations.filter(l => l.id !== activeLocationId);
-        const resolvedId = selectedTargetId || (otherRooms.length > 0 ? otherRooms[0].id : '');
-        if (resolvedId) {
-          targetId = resolvedId;
-        }
-      }
-    }
+      if (linkToRoom) {
+        if (hotspotMode === 'new') {
+          const roomName = newLinkRoomName.trim() || 'New Room';
+          targetId = `loc-${Date.now()}`;
 
-    let hotspotName = newLinkRoomName.trim();
-    if (targetId) {
-      const targetLoc = locations.find(l => l.id === targetId);
-      if (targetLoc && !hotspotName) {
-        hotspotName = targetLoc.name;
-      }
-    }
-
-    if (!hotspotName) {
-      hotspotName = landmarkArea.trim() ? `Area (${landmarkArea.trim()})` : (drawingPoints.length > 0 ? 'Area Outline' : 'Hotspot');
-    }
-
-    let pos = pendingHotspotPos;
-    if (!pos && drawingPoints.length > 0) {
-      const sum = drawingPoints.reduce((acc, curr) => [acc[0] + curr[0], acc[1] + curr[1], acc[2] + curr[2]], [0, 0, 0]);
-      const count = drawingPoints.length;
-      pos = [sum[0] / count, sum[1] / count, sum[2] / count];
-    }
-    if (!pos) {
-      pos = [0, 0, -100];
-    }
-
-    const assignedClient = clientUsersList.find(c => c.id === hotspotUserId);
-    const assignedName = assignedClient ? assignedClient.name : undefined;
-
-    setLocations(prev => {
-      const updated = prev.map(loc => {
-        if (loc.id !== activeLocationId) return loc;
-
-        const currentHotspots = loc.hotspots || [];
-        if (editingHotspotId) {
-          return {
-            ...loc,
-            hotspots: currentHotspots.map(h =>
-              h.id === editingHotspotId
-                ? {
-                  ...h,
-                  name: hotspotName,
-                  targetLocationId: targetId,
-                  area: landmarkArea.trim() || undefined,
-                  description: landmarkDesc.trim() || undefined,
-                  polygonPoints: drawingPoints.length > 0 ? drawingPoints : h.polygonPoints,
-                  icon: hotspotIcon,
-                  areaType: areaType,
-                  isPublic: hotspotIsPublic,
-                  assignedUserId: !hotspotIsPublic ? hotspotUserId : undefined,
-                  assignedUserName: !hotspotIsPublic ? assignedName : undefined
-                }
-                : h
-            )
+          newLocationToAppend = {
+            id: targetId,
+            name: roomName,
+            directions: { F: [], B: [], L: [], R: [], U: [], D: [] },
+            gridConfigs: { F: 'auto', B: 'auto', L: 'auto', R: 'auto', U: 'auto', D: 'auto' },
+            stitchedPanoPath: null,
+            hotspots: []
           };
         } else {
-          const newHotspot: HotspotItem = {
-            id: `hs-${Date.now()}`,
-            targetLocationId: targetId,
-            name: hotspotName,
-            area: landmarkArea.trim() || undefined,
-            description: landmarkDesc.trim() || undefined,
-            position: pos!,
-            polygonPoints: drawingPoints.length > 0 ? drawingPoints : undefined,
-            icon: hotspotIcon,
-            areaType: areaType,
-            isPublic: hotspotIsPublic,
-            assignedUserId: !hotspotIsPublic ? hotspotUserId : undefined,
-            assignedUserName: !hotspotIsPublic ? assignedName : undefined
-          };
-          return {
-            ...loc,
-            hotspots: [...currentHotspots, newHotspot]
-          };
+          // Existing Room Mode
+          targetId = selectedTargetId;
+          if (!targetId && otherRooms.length > 0) {
+            targetId = otherRooms[0].id;
+          }
+          if (!targetId && locations.length > 0) {
+            targetId = locations.find(l => l.id !== activeLocationId)?.id || locations[0].id;
+          }
         }
+      }
+
+      let hotspotName = newLinkRoomName.trim();
+      if (targetId) {
+        const targetLoc = locations.find(l => l.id === targetId);
+        if (targetLoc && !hotspotName) {
+          hotspotName = targetLoc.name;
+        }
+      }
+
+      if (!hotspotName) {
+        hotspotName = landmarkArea.trim() ? `Area (${landmarkArea.trim()})` : (drawingPoints.length > 0 ? 'Area Outline' : '360 Hotspot');
+      }
+
+      let pos = pendingHotspotPos;
+      if (!pos && drawingPoints.length > 0) {
+        const sum = drawingPoints.reduce((acc, curr) => [acc[0] + curr[0], acc[1] + curr[1], acc[2] + curr[2]], [0, 0, 0]);
+        const count = drawingPoints.length;
+        pos = [sum[0] / count, sum[1] / count, sum[2] / count];
+      }
+      if (!pos) {
+        pos = [0, 0, -100];
+      }
+
+      const assignedClient = clientUsersList.find(c => c.id === hotspotUserId);
+      const assignedName = assignedClient ? assignedClient.name : undefined;
+      const targetActiveId = activeLocationId || (locations.length > 0 ? locations[0].id : '');
+
+      setLocations(prev => {
+        const list = [...prev];
+        const activeIdx = list.findIndex(l => l.id === targetActiveId);
+
+        if (activeIdx !== -1) {
+          const currentHotspots = list[activeIdx].hotspots || [];
+          if (editingHotspotId) {
+            list[activeIdx] = {
+              ...list[activeIdx],
+              hotspots: currentHotspots.map(h =>
+                h.id === editingHotspotId
+                  ? {
+                    ...h,
+                    name: hotspotName,
+                    targetLocationId: targetId,
+                    area: landmarkArea.trim() || undefined,
+                    description: landmarkDesc.trim() || undefined,
+                    polygonPoints: drawingPoints.length > 0 ? drawingPoints : h.polygonPoints,
+                    icon: hotspotIcon,
+                    areaType: areaType,
+                    isPublic: hotspotIsPublic,
+                    assignedUserId: !hotspotIsPublic ? hotspotUserId : undefined,
+                    assignedUserName: !hotspotIsPublic ? assignedName : undefined
+                  }
+                  : h
+              )
+            };
+          } else {
+            const newHotspot: HotspotItem = {
+              id: `hs-${Date.now()}`,
+              targetLocationId: targetId,
+              name: hotspotName,
+              area: landmarkArea.trim() || undefined,
+              description: landmarkDesc.trim() || undefined,
+              position: pos!,
+              polygonPoints: drawingPoints.length > 0 ? drawingPoints : undefined,
+              icon: hotspotIcon,
+              areaType: areaType,
+              isPublic: hotspotIsPublic,
+              assignedUserId: !hotspotIsPublic ? hotspotUserId : undefined,
+              assignedUserName: !hotspotIsPublic ? assignedName : undefined
+            };
+            list[activeIdx] = {
+              ...list[activeIdx],
+              hotspots: [...currentHotspots, newHotspot]
+            };
+          }
+        }
+
+        if (newLocationToAppend) {
+          list.push(newLocationToAppend);
+        }
+
+        return list;
       });
 
-      if (newLocationToAppend) {
-        updated.push(newLocationToAppend);
-      }
-      return updated;
-    });
-
-    addLog(`${editingHotspotId ? 'Updated' : 'Created'} 3D hotspot: ${hotspotName} (${hotspotIsPublic ? 'Public' : `Private to ${assignedName || 'Client'}`})`);
-
-    setPendingHotspotPos(null);
-    setEditingHotspotId(null);
-    setShowLinkModal(false);
-    setIsPlacingHotspot(false);
-    setIsDrawingArea(false);
-    setNewLinkRoomName('');
-    setLandmarkArea('');
-    setLandmarkDesc('');
-    setDrawingPoints([]);
+      setLastUpdated(Date.now());
+      addLog(`${editingHotspotId ? 'Updated' : 'Created'} 3D hotspot: ${hotspotName}`);
+    } catch (err: any) {
+      console.error('Error saving hotspot:', err);
+    } finally {
+      setPendingHotspotPos(null);
+      setEditingHotspotId(null);
+      setShowLinkModal(false);
+      setIsPlacingHotspot(false);
+      setIsDrawingArea(false);
+      setNewLinkRoomName('');
+      setLandmarkArea('');
+      setLandmarkDesc('');
+      setDrawingPoints([]);
+    }
   };
 
   const handleEditHotspotClick = (hs: HotspotItem) => {
@@ -1859,7 +1872,14 @@ export default function App() {
                                 name="hotspot-mode"
                                 disabled={locations.filter(l => l.id !== activeLocationId).length === 0}
                                 checked={hotspotMode === 'existing'}
-                                onChange={() => setHotspotMode('existing')}
+                                onChange={() => {
+                                  setHotspotMode('existing');
+                                  const others = locations.filter(l => l.id !== activeLocationId);
+                                  if (others.length > 0) {
+                                    setSelectedTargetId(others[0].id);
+                                    if (!newLinkRoomName.trim()) setNewLinkRoomName(others[0].name);
+                                  }
+                                }}
                               />
                               Existing Room
                             </label>
@@ -1874,8 +1894,12 @@ export default function App() {
                               <label className="form-label">Select existing Room</label>
                               <select
                                 className="form-select"
-                                value={selectedTargetId}
-                                onChange={(e) => setSelectedTargetId(e.target.value)}
+                                value={selectedTargetId || (locations.filter(l => l.id !== activeLocationId)[0]?.id || '')}
+                                onChange={(e) => {
+                                  setSelectedTargetId(e.target.value);
+                                  const loc = locations.find(l => l.id === e.target.value);
+                                  if (loc && !newLinkRoomName.trim()) setNewLinkRoomName(loc.name);
+                                }}
                               >
                                 {locations.filter(l => l.id !== activeLocationId).map(loc => (
                                   <option key={loc.id} value={loc.id}>{loc.name}</option>
