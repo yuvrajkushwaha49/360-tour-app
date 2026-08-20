@@ -575,9 +575,9 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
           const resolvedAreaType = h.areaType || (hasPolygon && h.icon === 'arrow' ? 'road' : 'building');
 
           // Dynamic colors based on Area Style
-          let lineColor = 'white';
-          let overlayColor = 'black';
-          let overlayOpacity = 0.4;
+          let lineColor = '#a855f7'; // Purple / Violet
+          let overlayColor = '#a855f7';
+          let overlayOpacity = 0.35;
 
           if (resolvedAreaType === 'river') {
             lineColor = '#3b82f6';
@@ -591,12 +591,17 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
 
           return (
             <React.Fragment key={h.id}>
-              {/* 1. Draw Area Overlay (Black/Blue/Yellow semi-transparent shape on hover for Building/Land only) */}
+              {/* 1. Draw Area Overlay (Purple/Blue/Yellow semi-transparent shape on hover for Building/Land only) */}
               {hasPolygon && isOpen && resolvedAreaType !== 'road' && resolvedAreaType !== 'river' && (() => {
                 const meshData = getPolygonMesh(h.polygonPoints!);
                 if (!meshData) return null;
                 return (
-                  <mesh>
+                  <mesh
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (h.targetLocationId) onNavigate(h.targetLocationId, h.position);
+                    }}
+                  >
                     <bufferGeometry>
                       <bufferAttribute
                         attach="attributes-position"
@@ -867,7 +872,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
         <>
           <Line
             points={(areaType === 'road' || areaType === 'river') ? drawingPoints : [...drawingPoints, drawingPoints[0]]}
-            color={areaType === 'road' ? '#fbbf24' : areaType === 'river' ? '#3b82f6' : '#a5b4fc'}
+            color={areaType === 'road' ? '#fbbf24' : areaType === 'river' ? '#3b82f6' : '#a855f7'}
             lineWidth={4}
             depthTest={false}
           />
@@ -890,7 +895,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
       {drawingPoints.map((pt, idx) => (
         <mesh key={idx} position={pt}>
           <sphereGeometry args={[10, 8, 8]} />
-          <meshBasicMaterial color="#6366f1" />
+          <meshBasicMaterial color="#a855f7" />
         </mesh>
       ))}
     </group>

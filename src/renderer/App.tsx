@@ -1858,9 +1858,9 @@ export default function App() {
                           <label className="form-label">Select Area Style</label>
                           <div style={{ display: 'flex', gap: '8px' }}>
                             {[
-                              { value: 'building', label: '🏢 Building' },
-                              { value: 'river', label: '💧 River' },
-                              { value: 'road', label: '🛣 Road' }
+                              { value: 'building', label: '🏢 Area (Purple)' },
+                              { value: 'river', label: '💧 River (Blue)' },
+                              { value: 'road', label: '🛣 Road (Yellow)' }
                             ].map(opt => (
                               <button
                                 key={opt.value}
