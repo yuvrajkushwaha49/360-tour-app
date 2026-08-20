@@ -115,7 +115,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         Bucket: S3_BUCKET,
         Key: key,
         Body: fileStream,
-        ContentType: contentType
+        ContentType: contentType,
+        CacheControl: 'public, max-age=31536000, immutable'
       };
 
       await s3Client.send(new PutObjectCommand(uploadParams));
@@ -167,7 +168,8 @@ app.post('/api/upload-batch', upload.array('files', 100), async (req, res) => {
           Bucket: S3_BUCKET,
           Key: key,
           Body: fileStream,
-          ContentType: contentType
+          ContentType: contentType,
+          CacheControl: 'public, max-age=31536000, immutable'
         };
 
         console.log(`[AWS S3] Uploading "${file.originalname}" -> s3://${S3_BUCKET}/${key}`);
