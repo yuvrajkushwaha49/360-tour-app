@@ -692,6 +692,16 @@ export default function App() {
       hotspotName = landmarkArea.trim() ? `Area (${landmarkArea.trim()})` : (drawingPoints.length > 0 ? 'Area Outline' : 'Hotspot');
     }
 
+    let pos = pendingHotspotPos;
+    if (!pos && drawingPoints.length > 0) {
+      const sum = drawingPoints.reduce((acc, curr) => [acc[0] + curr[0], acc[1] + curr[1], acc[2] + curr[2]], [0, 0, 0]);
+      const count = drawingPoints.length;
+      pos = [sum[0] / count, sum[1] / count, sum[2] / count];
+    }
+    if (!pos) {
+      pos = [0, 0, -100];
+    }
+
     const assignedClient = clientUsersList.find(c => c.id === hotspotUserId);
     const assignedName = assignedClient ? assignedClient.name : undefined;
 
@@ -717,14 +727,13 @@ export default function App() {
       }));
       addLog(`Updated 3D hotspot: ${hotspotName} (${hotspotIsPublic ? 'Public' : `Private to ${assignedName || 'Client'}`})`);
     } else {
-      if (!pendingHotspotPos) return;
       const newHotspot: HotspotItem = {
         id: `hs-${Date.now()}`,
         targetLocationId: targetId,
         name: hotspotName,
         area: landmarkArea.trim() || undefined,
         description: landmarkDesc.trim() || undefined,
-        position: pendingHotspotPos,
+        position: pos,
         polygonPoints: drawingPoints.length > 0 ? drawingPoints : undefined,
         icon: hotspotIcon,
         areaType: areaType,
@@ -743,6 +752,7 @@ export default function App() {
     setEditingHotspotId(null);
     setShowLinkModal(false);
     setIsPlacingHotspot(false);
+    setIsDrawingArea(false);
     setNewLinkRoomName('');
     setLandmarkArea('');
     setLandmarkDesc('');
@@ -1996,16 +2006,17 @@ export default function App() {
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px' }}>
                         <button
                           className="btn"
-                          onClick={() => { setShowLinkModal(false); setPendingHotspotPos(null); setIsPlacingHotspot(false); }}
+                          type="button"
+                          onClick={() => { setShowLinkModal(false); setPendingHotspotPos(null); setIsPlacingHotspot(false); setIsDrawingArea(false); }}
                         >
                           Cancel
                         </button>
                         <button
                           className="btn btn-primary"
+                          type="button"
                           onClick={handleLinkHotspot}
-                          disabled={!newLinkRoomName.trim() && (hotspotMode === 'new' || !linkToRoom)}
                         >
-                          {editingHotspotId ? 'Save Changes' : 'Create Hotspot'}
+                          {editingHotspotId ? 'Save Changes' : (drawingPoints.length > 0 ? 'Save Area Outline' : 'Create Hotspot')}
                         </button>
                       </div>
                     </div>
