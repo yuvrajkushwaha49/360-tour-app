@@ -187,15 +187,8 @@ export default function App() {
       return 'public_tour';
     }
 
-    if (savedView && ['studio', 'crm'].includes(savedView)) {
-      return savedView;
-    }
-
-    try {
-      return 'crm';
-    } catch (e) {
-      return 'login';
-    }
+    // Always land on CRM Projects Dashboard by default
+    return 'crm';
   });
 
   const handleViewChange = (view: 'studio' | 'crm' | 'public_tour' | 'login') => {
