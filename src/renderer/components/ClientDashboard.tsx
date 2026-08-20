@@ -47,6 +47,22 @@ interface ProjectItem {
   };
 }
 
+// Helper to determine if a 360 virtual tour project has all faces/stitched pano completed
+export function isProjectCompleted(project: ProjectItem): boolean {
+  if (project.is_draft) return false;
+  const locations = project.data?.locations || [];
+  if (locations.length === 0) return false;
+
+  for (const loc of locations) {
+    if (loc.stitchedPanoPath) continue;
+    const dirs = loc.directions || {};
+    const faces = ['F', 'B', 'L', 'R', 'U', 'D'];
+    const hasAnyFace = faces.some(face => dirs[face] && dirs[face].length > 0);
+    if (!hasAnyFace) return false;
+  }
+  return true;
+}
+
 interface UserItem {
   id: string;
   name: string;
@@ -340,11 +356,16 @@ export default function ClientDashboard({
     setTimeout(() => setCopiedId(null), 2500);
   };
 
+  const completedCount = projects.filter(p => isProjectCompleted(p)).length;
+  const draftCount = projects.filter(p => !isProjectCompleted(p)).length;
+
   const filteredProjects = projects.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.client_name && p.client_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (p.data?.description && p.data.description.toLowerCase().includes(searchQuery.toLowerCase()));
     
+    if (filterTab === 'completed') return matchesSearch && isProjectCompleted(p);
+    if (filterTab === 'draft') return matchesSearch && !isProjectCompleted(p);
     if (filterTab === 'public') return matchesSearch && p.is_public;
     if (filterTab === 'private') return matchesSearch && !p.is_public;
     return matchesSearch;
@@ -670,13 +691,27 @@ export default function ClientDashboard({
               />
             </div>
 
-            <div className="btn-group rounded-3 p-1 bg-dark border border-secondary border-opacity-25">
+            <div className="btn-group rounded-3 p-1 bg-dark border border-secondary border-opacity-25 flex-wrap">
               <button
                 onClick={() => setFilterTab('all')}
                 className={`btn btn-sm ${filterTab === 'all' ? 'btn-primary font-weight-normal' : 'btn-dark text-secondary'}`}
               >
-                All ({projects.length})
+                All Projects ({projects.length})
               </button>
+              <button
+                onClick={() => setFilterTab('completed')}
+                className={`btn btn-sm ${filterTab === 'completed' ? 'btn-success font-weight-normal' : 'btn-dark text-secondary'}`}
+              >
+                ✅ Completed ({completedCount})
+              </button>
+              {user.role === 'admin' && (
+                <button
+                  onClick={() => setFilterTab('draft')}
+                  className={`btn btn-sm ${filterTab === 'draft' ? 'btn-danger font-weight-normal' : 'btn-dark text-secondary'}`}
+                >
+                  📝 Drafts / Incomplete ({draftCount})
+                </button>
+              )}
               <button
                 onClick={() => setFilterTab('private')}
                 className={`btn btn-sm ${filterTab === 'private' ? 'btn-warning text-dark font-weight-normal' : 'btn-dark text-secondary'}`}
@@ -685,7 +720,7 @@ export default function ClientDashboard({
               </button>
               <button
                 onClick={() => setFilterTab('public')}
-                className={`btn btn-sm ${filterTab === 'public' ? 'btn-success font-weight-normal' : 'btn-dark text-secondary'}`}
+                className={`btn btn-sm ${filterTab === 'public' ? 'btn-info font-weight-normal text-white' : 'btn-dark text-secondary'}`}
               >
                 <Globe className="w-3.5 h-3.5 me-1" /> Public
               </button>
@@ -734,18 +769,24 @@ export default function ClientDashboard({
                             </span>
                           </div>
 
-                          <div className="position-absolute top-0 start-0 m-3 z-2">
-                            {project.is_draft ? (
+                          <div className="position-absolute top-0 start-0 m-3 z-2 d-flex gap-1.5 flex-wrap">
+                            {!isProjectCompleted(project) ? (
                               <span className="badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-30 rounded-pill px-2.5 py-1.5 font-weight-normal">
-                                ⚡ Incomplete Draft
+                                📝 Incomplete Draft
                               </span>
-                            ) : project.is_public ? (
+                            ) : (
+                              <span className="badge bg-success bg-opacity-25 text-success border border-success border-opacity-30 rounded-pill px-2.5 py-1.5 font-weight-normal">
+                                ✅ Ready
+                              </span>
+                            )}
+
+                            {project.is_public ? (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (user.role === 'admin') togglePublic(project);
                                 }}
-                                className="badge bg-success bg-opacity-25 text-success border border-success border-opacity-30 rounded-pill px-2.5 py-1.5 cursor-pointer text-decoration-none font-weight-normal"
+                                className="badge bg-info bg-opacity-25 text-info border border-info border-opacity-30 rounded-pill px-2.5 py-1.5 cursor-pointer text-decoration-none font-weight-normal"
                               >
                                 🌐 Public
                               </button>
@@ -765,7 +806,7 @@ export default function ClientDashboard({
                           {/* Hover Launch Overlay */}
                           <div
                             onClick={() => {
-                              if (project.is_draft) {
+                              if (!isProjectCompleted(project)) {
                                 onOpenProject(project);
                               } else {
                                 onLaunchPublicView(project.id);
@@ -775,7 +816,7 @@ export default function ClientDashboard({
                           >
                             <button className="btn btn-primary font-weight-normal rounded-3 px-4 py-2 small shadow-lg d-flex align-items-center gap-2">
                               <Eye className="w-4 h-4" />
-                              <span>{project.is_draft ? 'Resume in Studio' : 'Launch 360° Viewer'}</span>
+                              <span>{!isProjectCompleted(project) ? '✏️ Resume in Studio' : 'Launch 360° Viewer'}</span>
                             </button>
                           </div>
                         </div>
