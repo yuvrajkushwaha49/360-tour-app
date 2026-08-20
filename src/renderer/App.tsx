@@ -1856,7 +1856,7 @@ export default function App() {
                       <div className="form-group" style={{ marginBottom: '16px', background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                         <label className="form-label" style={{ fontWeight: 'bold', marginBottom: '8px' }}>Hotspot Visibility & Access</label>
 
-                        {!isCurrentProjectPrivate ? (
+                        {crmProjectIsPublic ? (
                           <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                             <button
                               type="button"
@@ -1899,7 +1899,7 @@ export default function App() {
                           </div>
                         )}
 
-                        {(!hotspotIsPublic || isCurrentProjectPrivate) && (
+                        {(!hotspotIsPublic || !crmProjectIsPublic) && (
                           <div style={{ marginTop: '8px' }}>
                             <label className="form-label" style={{ fontSize: '0.75rem', color: '#f59e0b' }}>Assign to Specific Client *</label>
                             <select
