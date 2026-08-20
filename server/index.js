@@ -43,10 +43,18 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-// AWS S3 Configuration
+// AWS S3 & CloudFront CDN Configuration
 let s3Client = null;
 const S3_BUCKET = process.env.AWS_S3_BUCKET_NAME || '';
 const S3_REGION = process.env.AWS_REGION || 'ap-south-1';
+const CLOUDFRONT_DOMAIN = (process.env.AWS_CLOUDFRONT_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+function getPublicAssetUrl(key) {
+  if (CLOUDFRONT_DOMAIN) {
+    return `https://${CLOUDFRONT_DOMAIN}/${key}`;
+  }
+  return `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key}`;
+}
 
 if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && S3_BUCKET) {
   try {
@@ -61,6 +69,9 @@ if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && S3_BUC
     console.log(`[AWS S3] ✅ S3 Client initialized successfully!`);
     console.log(`         Bucket: ${S3_BUCKET}`);
     console.log(`         Region: ${S3_REGION}`);
+    if (CLOUDFRONT_DOMAIN) {
+      console.log(`         CloudFront CDN: https://${CLOUDFRONT_DOMAIN}`);
+    }
   } catch (e) {
     console.warn('[AWS S3 Error]: Could not initialize S3 Client:', e.message);
   }
@@ -111,11 +122,11 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       // Clean up temporary local file
       fs.unlink(req.file.path, () => {});
 
-      const s3Url = `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key}`;
+      const assetUrl = getPublicAssetUrl(key);
       return res.json({
-        url: s3Url,
+        url: assetUrl,
         filename: req.file.filename,
-        storage: 's3'
+        storage: CLOUDFRONT_DOMAIN ? 'cloudfront' : 's3'
       });
     } catch (s3Err) {
       console.error('[S3 Upload Error]:', s3Err.message);
@@ -161,9 +172,9 @@ app.post('/api/upload-batch', upload.array('files', 100), async (req, res) => {
         await s3Client.send(new PutObjectCommand(uploadParams));
         fs.unlink(file.path, () => {});
 
-        const s3Url = `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key}`;
-        console.log(`[AWS S3] ✅ S3 Upload success: ${s3Url}`);
-        results.push({ name: file.originalname, path: s3Url, storage: 's3' });
+        const assetUrl = getPublicAssetUrl(key);
+        console.log(`[AWS S3] ✅ Upload success: ${assetUrl}`);
+        results.push({ name: file.originalname, path: assetUrl, storage: CLOUDFRONT_DOMAIN ? 'cloudfront' : 's3' });
         continue;
       } catch (err) {
         console.error(`[AWS S3 Error] Failed to upload ${file.originalname}:`, err.message);
