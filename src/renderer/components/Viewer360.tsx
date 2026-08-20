@@ -3,7 +3,7 @@ import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { RotateCw, ZoomIn, ZoomOut, Maximize2, Compass, Play, Pause, PlusCircle, XCircle, CheckCircle, MapPin, ArrowUpCircle, Info } from 'lucide-react';
-import { API_BASE_URL } from '../utils/apiConfig';
+import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
 
 interface ProjectImage {
   name: string;
@@ -37,7 +37,7 @@ const TileMesh: React.FC<TileMeshProps> = ({ imagePath, position, rotation, size
   if (!imagePath) {
     resolvedUrl = '';
   } else if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('data:')) {
-    resolvedUrl = imagePath;
+    resolvedUrl = toCloudFrontUrl(imagePath);
   } else if (imagePath.startsWith('/uploads/')) {
     resolvedUrl = `${API_BASE_URL}${imagePath}`;
   } else {
@@ -67,7 +67,7 @@ const EquirectangularPano: React.FC<{ imagePath: string }> = ({ imagePath }) => 
   if (!imagePath) {
     resolvedUrl = '';
   } else if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('data:')) {
-    resolvedUrl = imagePath;
+    resolvedUrl = toCloudFrontUrl(imagePath);
   } else if (imagePath.startsWith('/uploads/')) {
     resolvedUrl = `${API_BASE_URL}${imagePath}`;
   } else {
@@ -992,7 +992,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
     const resolveUrl = (pathStr: string) => {
       if (!pathStr) return '';
       if (pathStr.startsWith('http://') || pathStr.startsWith('https://') || pathStr.startsWith('data:')) {
-        return pathStr;
+        return toCloudFrontUrl(pathStr);
       }
       if (pathStr.startsWith('/uploads/')) {
         return `${API_BASE_URL}${pathStr}`;
