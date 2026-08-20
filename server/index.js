@@ -475,18 +475,103 @@ app.put('/api/projects/:id', authenticateToken, (req, res) => {
   }
 });
 
-// Delete project
+// Helper to extract S3 object keys from URLs / data structures
+function extractS3KeysFromData(obj) {
+  const keys = new Set();
+  const scan = (val) => {
+    if (!val) return;
+    if (typeof val === 'string') {
+      const match = val.match(/uploads\/([^"'\s?#]+)/);
+      if (match) {
+        keys.add(`uploads/${match[1]}`);
+      }
+    } else if (Array.isArray(val)) {
+      val.forEach(scan);
+    } else if (typeof val === 'object') {
+      Object.values(val).forEach(scan);
+    }
+  };
+  scan(obj);
+  return Array.from(keys);
+}
+
+// Delete objects from AWS S3 bucket and local server disk
+async function deleteAssets(keys) {
+  if (!keys || keys.length === 0) return;
+  console.log(`[Delete Assets] Purging ${keys.length} asset(s) from S3 & disk:`, keys);
+
+  // 1. Delete from AWS S3
+  if (s3Client && S3_BUCKET) {
+    try {
+      const { DeleteObjectsCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+      if (keys.length === 1) {
+        await s3Client.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: keys[0] }));
+      } else {
+        await s3Client.send(new DeleteObjectsCommand({
+          Bucket: S3_BUCKET,
+          Delete: { Objects: keys.map(k => ({ Key: k })), Quiet: true }
+        }));
+      }
+      console.log(`[AWS S3] 🗑️ Successfully deleted ${keys.length} object(s) from S3 bucket: ${S3_BUCKET}`);
+    } catch (s3Err) {
+      console.error('[AWS S3 Delete Error]:', s3Err.message);
+    }
+  }
+
+  // 2. Delete from local server disk (/uploads/)
+  for (const key of keys) {
+    try {
+      const filename = path.basename(key);
+      const localFilePath = path.join(UPLOADS_DIR, filename);
+      if (fs.existsSync(localFilePath)) {
+        fs.unlinkSync(localFilePath);
+      }
+    } catch (e) {}
+  }
+}
+
+// Bulk Asset Deletion Endpoint (Used when clearing faces or deleting rooms)
+app.post('/api/delete-assets', (req, res) => {
+  const { paths, keys } = req.body;
+  const targetKeys = keys || extractS3KeysFromData(paths);
+  if (targetKeys && targetKeys.length > 0) {
+    deleteAssets(targetKeys);
+  }
+  res.json({ message: 'Assets deleted successfully', count: targetKeys ? targetKeys.length : 0 });
+});
+
+// Delete project and automatically purge its S3 images & database records
 app.delete('/api/projects/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
-  const query = req.userRole === 'admin'
-    ? `DELETE FROM projects WHERE id = ?`
-    : `DELETE FROM projects WHERE id = ? AND user_id = ?`;
+  const selectQuery = req.userRole === 'admin'
+    ? `SELECT data FROM projects WHERE id = ?`
+    : `SELECT data FROM projects WHERE id = ? AND user_id = ?`;
   const params = req.userRole === 'admin' ? [id] : [id, req.userId];
 
-  db.run(query, params, function (err) {
+  db.get(selectQuery, params, async (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
-    if (this.changes === 0) return res.status(404).json({ error: 'Project not found or unauthorized.' });
-    res.json({ message: 'Project deleted successfully.' });
+    if (!row) return res.status(404).json({ error: 'Project not found or unauthorized.' });
+
+    // 1. Purge all S3 images & local uploads associated with this project
+    try {
+      const projectData = JSON.parse(row.data);
+      const keysToDelete = extractS3KeysFromData(projectData);
+      if (keysToDelete.length > 0) {
+        await deleteAssets(keysToDelete);
+      }
+    } catch (parseErr) {
+      console.warn('Could not parse project data for asset cleanup:', parseErr);
+    }
+
+    // 2. Delete project from SQLite database
+    const deleteQuery = req.userRole === 'admin'
+      ? `DELETE FROM projects WHERE id = ?`
+      : `DELETE FROM projects WHERE id = ? AND user_id = ?`;
+
+    db.run(deleteQuery, params, function (delErr) {
+      if (delErr) return res.status(500).json({ error: delErr.message });
+      res.json({ message: 'Project and all associated S3 images deleted successfully.' });
+    });
   });
 });
 

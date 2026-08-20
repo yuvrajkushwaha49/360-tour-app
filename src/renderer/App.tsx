@@ -807,12 +807,32 @@ export default function App() {
       addLog('Cannot delete the only location in the project.');
       return;
     }
+    const locToDelete = locations.find(l => l.id === id);
+    if (locToDelete) {
+      const pathsToDelete: string[] = [];
+      if (locToDelete.stitchedPanoPath) pathsToDelete.push(locToDelete.stitchedPanoPath);
+      if (locToDelete.directions) {
+        Object.values(locToDelete.directions).forEach(imgs => {
+          (imgs || []).forEach(img => {
+            if (img.path) pathsToDelete.push(img.path);
+          });
+        });
+      }
+      if (pathsToDelete.length > 0) {
+        fetch(`${API_BASE_URL}/api/delete-assets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paths: pathsToDelete })
+        }).catch(e => console.warn('Asset delete notice:', e));
+      }
+    }
+
     const filtered = locations.filter(l => l.id !== id);
     setLocations(filtered);
     if (activeLocationId === id) {
       setActiveLocationId(filtered[0].id);
     }
-    addLog(`Deleted location: ${name}`);
+    addLog(`Deleted location: ${name} and purged assets from S3`);
   };
 
   const handleSaveProject = async () => {
@@ -1096,13 +1116,25 @@ export default function App() {
   };
 
   const handleClearDirection = (dirKey: string) => {
+    const currentImgs = directions[dirKey] || [];
+    if (currentImgs.length > 0) {
+      const pathsToDelete = currentImgs.map(img => img.path).filter(Boolean);
+      if (pathsToDelete.length > 0) {
+        fetch(`${API_BASE_URL}/api/delete-assets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paths: pathsToDelete })
+        }).catch(e => console.warn('Asset delete notice:', e));
+      }
+    }
+
     setDirections(prev => ({
       ...prev,
       [dirKey]: []
     }));
     setStitchedPanoPath(null);
     setLastUpdated(Date.now());
-    addLog(`Cleared images in ${DIRECTIONS_LABELS[dirKey]}`);
+    addLog(`Cleared images in ${DIRECTIONS_LABELS[dirKey]} and purged from S3`);
   };
 
   const detectGrid = (images: ProjectImage[]) => {
