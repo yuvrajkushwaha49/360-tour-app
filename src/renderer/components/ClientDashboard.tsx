@@ -329,7 +329,11 @@ export default function ClientDashboard({
   };
 
   const deleteProject = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this 360 tour project?')) return;
+    const proj = projects.find(p => p.id === id);
+    const projName = proj ? proj.name : 'this 360 tour project';
+    const confirmMsg = `⚠️ Are you sure you want to permanently delete "${projName}"?\n\nThis will permanently delete the project from the database and purge all its 360 images from AWS S3 Cloud Storage.`;
+    if (!window.confirm(confirmMsg)) return;
+
     try {
       await fetch(`${API_BASE_URL}/api/projects/${id}`, {
         method: 'DELETE',

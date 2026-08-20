@@ -804,9 +804,13 @@ export default function App() {
 
   const handleDeleteLocation = (id: string, name: string) => {
     if (locations.length <= 1) {
-      addLog('Cannot delete the only location in the project.');
+      alert('Cannot delete the only location in the project.');
       return;
     }
+
+    const confirmMsg = `⚠️ Are you sure you want to delete room "${name}"?\n\nAll uploaded photos and 360 panorama data for this room will be permanently removed from Cloud Storage (S3).`;
+    if (!window.confirm(confirmMsg)) return;
+
     const locToDelete = locations.find(l => l.id === id);
     if (locToDelete) {
       const pathsToDelete: string[] = [];
@@ -1117,15 +1121,18 @@ export default function App() {
 
   const handleClearDirection = (dirKey: string) => {
     const currentImgs = directions[dirKey] || [];
-    if (currentImgs.length > 0) {
-      const pathsToDelete = currentImgs.map(img => img.path).filter(Boolean);
-      if (pathsToDelete.length > 0) {
-        fetch(`${API_BASE_URL}/api/delete-assets`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paths: pathsToDelete })
-        }).catch(e => console.warn('Asset delete notice:', e));
-      }
+    if (currentImgs.length === 0) return;
+
+    const confirmMsg = `⚠️ Clear all ${currentImgs.length} photo(s) in ${DIRECTIONS_LABELS[dirKey]}?\n\nThis will permanently delete these images from Cloud Storage (S3).`;
+    if (!window.confirm(confirmMsg)) return;
+
+    const pathsToDelete = currentImgs.map(img => img.path).filter(Boolean);
+    if (pathsToDelete.length > 0) {
+      fetch(`${API_BASE_URL}/api/delete-assets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths: pathsToDelete })
+      }).catch(e => console.warn('Asset delete notice:', e));
     }
 
     setDirections(prev => ({
