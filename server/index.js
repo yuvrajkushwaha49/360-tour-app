@@ -49,6 +49,7 @@ const S3_BUCKET = process.env.AWS_S3_BUCKET_NAME || '';
 const S3_REGION = process.env.AWS_REGION || 'ap-south-1';
 const CLOUDFRONT_DOMAIN = (process.env.AWS_CLOUDFRONT_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
 
+// Fast CDN / S3 asset URL resolver
 function getPublicAssetUrl(key) {
   if (CLOUDFRONT_DOMAIN) {
     return `https://${CLOUDFRONT_DOMAIN}/${key}`;
@@ -70,7 +71,7 @@ if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && S3_BUC
     console.log(`         Bucket: ${S3_BUCKET}`);
     console.log(`         Region: ${S3_REGION}`);
     if (CLOUDFRONT_DOMAIN) {
-      console.log(`         CloudFront CDN: https://${CLOUDFRONT_DOMAIN}`);
+      console.log(`[CloudFront CDN] ⚡ Active Global CDN Domain: https://${CLOUDFRONT_DOMAIN}`);
     }
   } catch (e) {
     console.warn('[AWS S3 Error]: Could not initialize S3 Client:', e.message);
@@ -123,6 +124,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       fs.unlink(req.file.path, () => {});
 
       const assetUrl = getPublicAssetUrl(key);
+      console.log(`[CloudFront/S3] ✅ Upload success: ${assetUrl}`);
       return res.json({
         url: assetUrl,
         filename: req.file.filename,
@@ -173,7 +175,7 @@ app.post('/api/upload-batch', upload.array('files', 100), async (req, res) => {
         fs.unlink(file.path, () => {});
 
         const assetUrl = getPublicAssetUrl(key);
-        console.log(`[AWS S3] ✅ Upload success: ${assetUrl}`);
+        console.log(`[CloudFront/S3] ✅ CDN Asset URL: ${assetUrl}`);
         results.push({ name: file.originalname, path: assetUrl, storage: CLOUDFRONT_DOMAIN ? 'cloudfront' : 's3' });
         continue;
       } catch (err) {
