@@ -1,13 +1,17 @@
-// Dynamic API Base URL resolver
+// Live AWS Server IP
+export const AWS_SERVER_URL = 'http://13.206.71.115';
+
+// Dynamic API Base URL resolver: connects to AWS live server from both cloud and localhost
 export function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    // On AWS / Web Server, use relative URL (Nginx handles proxying to port 5000)
-    if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && !window.location.protocol.startsWith('file')) {
+    // When running directly on the AWS web server domain/IP, use relative URL (Nginx handles proxying)
+    if (hostname === '13.206.71.115' || (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && !window.location.protocol.startsWith('file'))) {
       return '';
     }
   }
-  return 'http://localhost:5000';
+  // When running on localhost (Local PC / Electron / Vite Dev Server), connect to live AWS database & API
+  return AWS_SERVER_URL;
 }
 
 export const API_BASE_URL = getApiBaseUrl();
