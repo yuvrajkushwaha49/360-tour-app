@@ -655,13 +655,14 @@ export default function App() {
 
   const handleLinkHotspot = () => {
     let targetId: string | undefined = undefined;
+    let newLocationToAppend: LocationItem | null = null;
 
     if (linkToRoom) {
       if (hotspotMode === 'new') {
         const roomName = newLinkRoomName.trim() || 'New Room';
         targetId = `loc-${Date.now()}`;
 
-        const newLoc: LocationItem = {
+        newLocationToAppend = {
           id: targetId,
           name: roomName,
           directions: { F: [], B: [], L: [], R: [], U: [], D: [] },
@@ -669,8 +670,6 @@ export default function App() {
           stitchedPanoPath: null,
           hotspots: []
         };
-
-        setLocations(prev => [...prev, newLoc]);
       } else {
         const otherRooms = locations.filter(l => l.id !== activeLocationId);
         const resolvedId = selectedTargetId || (otherRooms.length > 0 ? otherRooms[0].id : '');
@@ -705,48 +704,61 @@ export default function App() {
     const assignedClient = clientUsersList.find(c => c.id === hotspotUserId);
     const assignedName = assignedClient ? assignedClient.name : undefined;
 
-    if (editingHotspotId) {
-      updateActiveLocation(loc => ({
-        hotspots: (loc.hotspots || []).map(h =>
-          h.id === editingHotspotId
-            ? {
-              ...h,
-              name: hotspotName,
-              targetLocationId: targetId,
-              area: landmarkArea.trim() || undefined,
-              description: landmarkDesc.trim() || undefined,
-              polygonPoints: drawingPoints.length > 0 ? drawingPoints : h.polygonPoints,
-              icon: hotspotIcon,
-              areaType: areaType,
-              isPublic: hotspotIsPublic,
-              assignedUserId: !hotspotIsPublic ? hotspotUserId : undefined,
-              assignedUserName: !hotspotIsPublic ? assignedName : undefined
-            }
-            : h
-        )
-      }));
-      addLog(`Updated 3D hotspot: ${hotspotName} (${hotspotIsPublic ? 'Public' : `Private to ${assignedName || 'Client'}`})`);
-    } else {
-      const newHotspot: HotspotItem = {
-        id: `hs-${Date.now()}`,
-        targetLocationId: targetId,
-        name: hotspotName,
-        area: landmarkArea.trim() || undefined,
-        description: landmarkDesc.trim() || undefined,
-        position: pos,
-        polygonPoints: drawingPoints.length > 0 ? drawingPoints : undefined,
-        icon: hotspotIcon,
-        areaType: areaType,
-        isPublic: hotspotIsPublic,
-        assignedUserId: !hotspotIsPublic ? hotspotUserId : undefined,
-        assignedUserName: !hotspotIsPublic ? assignedName : undefined
-      };
+    setLocations(prev => {
+      const updated = prev.map(loc => {
+        if (loc.id !== activeLocationId) return loc;
 
-      updateActiveLocation(loc => ({
-        hotspots: [...(loc.hotspots || []), newHotspot]
-      }));
-      addLog(`Created 3D hotspot: ${newHotspot.name} (${hotspotIsPublic ? 'Public' : `Private to ${assignedName || 'Client'}`})`);
-    }
+        const currentHotspots = loc.hotspots || [];
+        if (editingHotspotId) {
+          return {
+            ...loc,
+            hotspots: currentHotspots.map(h =>
+              h.id === editingHotspotId
+                ? {
+                  ...h,
+                  name: hotspotName,
+                  targetLocationId: targetId,
+                  area: landmarkArea.trim() || undefined,
+                  description: landmarkDesc.trim() || undefined,
+                  polygonPoints: drawingPoints.length > 0 ? drawingPoints : h.polygonPoints,
+                  icon: hotspotIcon,
+                  areaType: areaType,
+                  isPublic: hotspotIsPublic,
+                  assignedUserId: !hotspotIsPublic ? hotspotUserId : undefined,
+                  assignedUserName: !hotspotIsPublic ? assignedName : undefined
+                }
+                : h
+            )
+          };
+        } else {
+          const newHotspot: HotspotItem = {
+            id: `hs-${Date.now()}`,
+            targetLocationId: targetId,
+            name: hotspotName,
+            area: landmarkArea.trim() || undefined,
+            description: landmarkDesc.trim() || undefined,
+            position: pos!,
+            polygonPoints: drawingPoints.length > 0 ? drawingPoints : undefined,
+            icon: hotspotIcon,
+            areaType: areaType,
+            isPublic: hotspotIsPublic,
+            assignedUserId: !hotspotIsPublic ? hotspotUserId : undefined,
+            assignedUserName: !hotspotIsPublic ? assignedName : undefined
+          };
+          return {
+            ...loc,
+            hotspots: [...currentHotspots, newHotspot]
+          };
+        }
+      });
+
+      if (newLocationToAppend) {
+        updated.push(newLocationToAppend);
+      }
+      return updated;
+    });
+
+    addLog(`${editingHotspotId ? 'Updated' : 'Created'} 3D hotspot: ${hotspotName} (${hotspotIsPublic ? 'Public' : `Private to ${assignedName || 'Client'}`})`);
 
     setPendingHotspotPos(null);
     setEditingHotspotId(null);
