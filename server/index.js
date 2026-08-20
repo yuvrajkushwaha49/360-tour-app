@@ -9,6 +9,34 @@ const { hashPassword, verifyPassword, generateToken, authenticateToken, JWT_SECR
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Native .env file loader (supports server/.env and root .env)
+function loadEnvFile(filePath) {
+  if (fs.existsSync(filePath)) {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      content.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith('#')) {
+          const eqIdx = trimmed.indexOf('=');
+          if (eqIdx !== -1) {
+            const key = trimmed.substring(0, eqIdx).trim();
+            const val = trimmed.substring(eqIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+            if (!process.env[key]) {
+              process.env[key] = val;
+            }
+          }
+        }
+      });
+      console.log(`[Config] Loaded environment variables from: ${filePath}`);
+    } catch (e) {
+      console.warn(`[Config] Failed to parse ${filePath}:`, e.message);
+    }
+  }
+}
+
+loadEnvFile(path.join(__dirname, '.env'));
+loadEnvFile(path.join(__dirname, '..', '.env'));
+
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -26,14 +54,21 @@ if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && S3_BUC
     s3Client = new S3Client({
       region: S3_REGION,
       credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID.trim(),
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY.trim()
       }
     });
-    console.log(`[AWS S3] Initialized S3 Client for bucket: ${S3_BUCKET} in region: ${S3_REGION}`);
+    console.log(`[AWS S3] ✅ S3 Client initialized successfully!`);
+    console.log(`         Bucket: ${S3_BUCKET}`);
+    console.log(`         Region: ${S3_REGION}`);
   } catch (e) {
-    console.warn('[AWS S3 Notice]: Install @aws-sdk/client-s3 to enable direct cloud S3 upload.');
+    console.warn('[AWS S3 Error]: Could not initialize S3 Client:', e.message);
   }
+} else {
+  console.log('[AWS S3 Status]: S3 environment variables not fully set. Using local server disk (/uploads/).');
+  console.log(`         AWS_ACCESS_KEY_ID present: ${!!process.env.AWS_ACCESS_KEY_ID}`);
+  console.log(`         AWS_SECRET_ACCESS_KEY present: ${!!process.env.AWS_SECRET_ACCESS_KEY}`);
+  console.log(`         AWS_S3_BUCKET_NAME: "${S3_BUCKET}"`);
 }
 
 // Configure multer for file uploads
@@ -103,6 +138,7 @@ app.post('/api/upload-batch', upload.array('files', 100), async (req, res) => {
     return res.status(400).json({ error: 'No files provided.' });
   }
 
+  console.log(`[Upload Batch] Received ${files.length} file(s) for upload...`);
   const results = [];
 
   for (const file of files) {
@@ -121,15 +157,19 @@ app.post('/api/upload-batch', upload.array('files', 100), async (req, res) => {
           ContentType: contentType
         };
 
+        console.log(`[AWS S3] Uploading "${file.originalname}" -> s3://${S3_BUCKET}/${key}`);
         await s3Client.send(new PutObjectCommand(uploadParams));
         fs.unlink(file.path, () => {});
 
         const s3Url = `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key}`;
+        console.log(`[AWS S3] ✅ S3 Upload success: ${s3Url}`);
         results.push({ name: file.originalname, path: s3Url, storage: 's3' });
         continue;
       } catch (err) {
-        console.error('[S3 Batch Upload Error]:', err.message);
+        console.error(`[AWS S3 Error] Failed to upload ${file.originalname}:`, err.message);
       }
+    } else {
+      console.warn(`[Local Fallback] S3 not active (s3Client: ${!!s3Client}, bucket: "${S3_BUCKET}"). Saving to local server disk.`);
     }
 
     // Local server storage fallback
