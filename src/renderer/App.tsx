@@ -658,12 +658,12 @@ export default function App() {
 
     if (linkToRoom) {
       if (hotspotMode === 'new') {
-        if (!newLinkRoomName.trim()) return;
+        const roomName = newLinkRoomName.trim() || 'New Room';
         targetId = `loc-${Date.now()}`;
 
         const newLoc: LocationItem = {
           id: targetId,
-          name: newLinkRoomName.trim(),
+          name: roomName,
           directions: { F: [], B: [], L: [], R: [], U: [], D: [] },
           gridConfigs: { F: 'auto', B: 'auto', L: 'auto', R: 'auto', U: 'auto', D: 'auto' },
           stitchedPanoPath: null,
@@ -672,17 +672,24 @@ export default function App() {
 
         setLocations(prev => [...prev, newLoc]);
       } else {
-        if (!selectedTargetId) return;
-        const targetLoc = locations.find(l => l.id === selectedTargetId);
-        if (!targetLoc) return;
-        targetId = selectedTargetId;
+        const otherRooms = locations.filter(l => l.id !== activeLocationId);
+        const resolvedId = selectedTargetId || (otherRooms.length > 0 ? otherRooms[0].id : '');
+        if (resolvedId) {
+          targetId = resolvedId;
+        }
       }
     }
 
     let hotspotName = newLinkRoomName.trim();
-    if (linkToRoom && hotspotMode === 'existing') {
-      const targetLoc = locations.find(l => l.id === selectedTargetId);
-      if (targetLoc) hotspotName = targetLoc.name;
+    if (targetId) {
+      const targetLoc = locations.find(l => l.id === targetId);
+      if (targetLoc && !hotspotName) {
+        hotspotName = targetLoc.name;
+      }
+    }
+
+    if (!hotspotName) {
+      hotspotName = landmarkArea.trim() ? `Area (${landmarkArea.trim()})` : (drawingPoints.length > 0 ? 'Area Outline' : 'Hotspot');
     }
 
     const assignedClient = clientUsersList.find(c => c.id === hotspotUserId);
@@ -791,12 +798,17 @@ export default function App() {
 
     setPendingHotspotPos(centerPos);
 
+    const otherRooms = locations.filter(l => l.id !== activeLocationId);
+    setSelectedTargetId(otherRooms.length > 0 ? otherRooms[0].id : '');
+    setHotspotMode(otherRooms.length > 0 ? 'existing' : 'new');
+
     // If not editing an existing hotspot, reset inputs for a new outline
     if (!editingHotspotId) {
       setLinkToRoom(false);
       setNewLinkRoomName('');
       setLandmarkArea('');
       setLandmarkDesc('');
+      setAreaType('building');
     }
 
     setShowLinkModal(true);
