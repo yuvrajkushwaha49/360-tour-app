@@ -1248,8 +1248,8 @@ export default function App() {
     );
   }
 
-  if (activeView === 'login') {
-    return <ClientLoginPage onSuccess={handleAuthSuccess} onBack={() => handleViewChange('studio')} />;
+  if (!currentUser || !authToken || activeView === 'login') {
+    return <ClientLoginPage onSuccess={handleAuthSuccess} />;
   }
 
   return (
