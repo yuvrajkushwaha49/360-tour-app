@@ -1293,16 +1293,6 @@ export default function App() {
 
           {/* Mode Switch Tabs */}
           <div className="mode-switch-pill d-inline-flex">
-            {currentUser?.role === 'admin' && (
-              <button
-                onClick={() => setActiveView('studio')}
-                className={`mode-tab-btn ${activeView === 'studio' ? 'active-studio' : ''}`}
-              >
-                <Cpu className="w-3.5 h-3.5 me-1" />
-                <span>Studio Mode</span>
-              </button>
-            )}
-
             {currentUser?.role !== 'client' && (
               <button
                 onClick={() => {
@@ -1313,9 +1303,21 @@ export default function App() {
                   }
                 }}
                 className={`mode-tab-btn ${activeView === 'crm' ? 'active-crm' : ''}`}
+                title="View All Projects, Completed Tours & Drafts"
               >
                 <LayoutDashboard className="w-3.5 h-3.5 me-1" />
-                <span>{currentUser?.role === 'client' ? 'My 360 Virtual Tours' : 'Client CRM Portal'}</span>
+                <span>📁 All Projects Dashboard</span>
+              </button>
+            )}
+
+            {currentUser?.role === 'admin' && (
+              <button
+                onClick={() => setActiveView('studio')}
+                className={`mode-tab-btn ${activeView === 'studio' ? 'active-studio' : ''}`}
+                title="Open 360 3D Studio Editor"
+              >
+                <Cpu className="w-3.5 h-3.5 me-1" />
+                <span>🛠️ 3D Studio Editor</span>
               </button>
             )}
           </div>
@@ -1325,12 +1327,19 @@ export default function App() {
           {activeView === 'studio' && (
             <>
               <button
+                className="btn btn-sm btn-outline-info text-white rounded-3 px-3 d-flex align-items-center gap-1 font-weight-normal"
+                onClick={() => setActiveView('crm')}
+                title="Browse All Projects & Drafts"
+              >
+                <LayoutDashboard size={14} className="text-info" /> Browse Projects
+              </button>
+              <button
                 className="btn btn-sm d-flex align-items-center gap-1 rounded-3 px-3"
                 style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none', fontWeight: 600, fontSize: '0.8rem' }}
                 onClick={() => { setNewProjectName(''); setIsNewProjectModalOpen(true); }}
                 title="Start a brand new 360 project"
               >
-                <FolderOpen size={14} /> New Project
+                <FolderOpen size={14} /> + New Project
               </button>
               <button className="btn btn-sm btn-secondary text-white rounded-3 px-3 d-flex align-items-center gap-1" onClick={handleLoadProject}>
                 <FolderOpen size={14} /> Open File
