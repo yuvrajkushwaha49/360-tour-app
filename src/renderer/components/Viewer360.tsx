@@ -647,7 +647,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                 </group>
               )}
 
-              {!isPlacingHotspot && (() => {
+              {(() => {
                 const isRoadArrow = resolvedAreaType === 'road' && h.icon === 'arrow';
 
                 if (isRoadArrow && h.polygonPoints && h.polygonPoints.length > 1) {
