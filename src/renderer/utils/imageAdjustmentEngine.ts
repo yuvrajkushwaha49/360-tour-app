@@ -102,12 +102,14 @@ export function injectAdjustmentsShader(shader: any, uniformsRef: React.MutableR
     }
 
     // 8. Vignette
+    #ifdef USE_MAP
     if (uVignette > 0.1) {
-      vec2 centerUv = vUv - vec2(0.5);
+      vec2 centerUv = vMapUv - vec2(0.5);
       float dist = length(centerUv);
       float vigFactor = smoothstep(0.75, 0.2, dist * (uVignette / 50.0));
       diffuseColor.rgb *= mix(1.0, vigFactor, uVignette / 100.0);
     }
+    #endif
 
     diffuseColor.rgb = clamp(diffuseColor.rgb, 0.0, 1.0);
     `
