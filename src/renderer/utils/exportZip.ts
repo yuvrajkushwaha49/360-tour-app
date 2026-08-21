@@ -417,6 +417,51 @@ export async function exportProjectToZip(
     let tourData = null;
     let currentLocation = null;
     let scene, camera, renderer, controls, sphereMesh;
+
+    function applyAdjustmentsToMaterial(material, adjustments) {
+      if (!adjustments) return;
+      var adj = adjustments;
+      material.onBeforeCompile = function(shader) {
+        shader.uniforms.uBrightness = { value: adj.brightness || 0 };
+        shader.uniforms.uContrast = { value: adj.contrast || 0 };
+        shader.uniforms.uExposure = { value: adj.exposure || 0 };
+        shader.uniforms.uSaturation = { value: adj.saturation || 0 };
+        shader.uniforms.uHue = { value: adj.hue || 0 };
+        shader.uniforms.uTemperature = { value: adj.temperature || 0 };
+        shader.uniforms.uSharpen = { value: adj.sharpen || 0 };
+        shader.uniforms.uVignette = { value: adj.vignette || 0 };
+
+        shader.fragmentShader = 'uniform float uBrightness; uniform float uContrast; uniform float uExposure; uniform float uSaturation; uniform float uHue; uniform float uTemperature; uniform float uSharpen; uniform float uVignette;\n' + shader.fragmentShader;
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          '#include <map_fragment>\n' +
+          'diffuseColor.rgb *= pow(2.0, uExposure / 50.0);\n' +
+          'diffuseColor.rgb += uBrightness / 100.0;\n' +
+          'diffuseColor.rgb = (diffuseColor.rgb - 0.5) * (1.0 + uContrast / 100.0) + 0.5;\n' +
+          'diffuseColor.r += uTemperature / 250.0;\n' +
+          'diffuseColor.g += uTemperature / 500.0;\n' +
+          'diffuseColor.b -= uTemperature / 250.0;\n' +
+          'float lum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));\n' +
+          'diffuseColor.rgb = mix(vec3(lum), diffuseColor.rgb, 1.0 + uSaturation / 100.0);\n' +
+          'if (abs(uHue) > 0.1) {\n' +
+          '  float angle = uHue * 0.01745329251;\n' +
+          '  float cosA = cos(angle);\n' +
+          '  float sinA = sin(angle);\n' +
+          '  mat3 hueMat = mat3(\n' +
+          '    0.299 + 0.701 * cosA + 0.168 * sinA, 0.587 - 0.587 * cosA + 0.330 * sinA, 0.114 - 0.114 * cosA - 0.497 * sinA,\n' +
+          '    0.299 - 0.299 * cosA - 0.328 * sinA, 0.587 + 0.413 * cosA + 0.035 * sinA, 0.114 - 0.114 * cosA + 0.292 * sinA,\n' +
+          '    0.299 - 0.300 * cosA + 1.250 * sinA, 0.587 - 0.588 * cosA - 1.050 * sinA, 0.114 + 0.886 * cosA - 0.203 * sinA\n' +
+          '  );\n' +
+          '  diffuseColor.rgb = clamp(hueMat * diffuseColor.rgb, 0.0, 1.0);\n' +
+          '}\n' +
+          'if (uSharpen > 0.1) { vec3 avgColor = vec3(lum); diffuseColor.rgb += (diffuseColor.rgb - avgColor) * (uSharpen / 200.0); }\n' +
+          'if (uVignette > 0.1) { vec2 centerUv = vUv - vec2(0.5); float dist = length(centerUv); float vigFactor = smoothstep(0.75, 0.2, dist * (uVignette / 50.0)); diffuseColor.rgb *= mix(1.0, vigFactor, uVignette / 100.0); }\n' +
+          'diffuseColor.rgb = clamp(diffuseColor.rgb, 0.0, 1.0);'
+        );
+      };
+    }
+
     let autoRotate = false;
     const hotspotElements = [];
     const polygonMeshes = [];
@@ -557,6 +602,7 @@ export async function exportProjectToZip(
           texture.anisotropy = maxAniso;
           texture.encoding = THREE.sRGBEncoding;
           const planeMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+          applyAdjustmentsToMaterial(planeMat, currentLocation ? currentLocation.adjustments : null);
           const planeMesh = new THREE.Mesh(planeGeom, planeMat);
           planeMesh.position.set(pos[0], pos[1], pos[2]);
           planeMesh.rotation.set(rot[0], rot[1], rot[2]);
@@ -639,6 +685,7 @@ export async function exportProjectToZip(
           texture.minFilter = THREE.LinearFilter;
           texture.magFilter = THREE.LinearFilter;
           sphereMesh.material.map = texture;
+          applyAdjustmentsToMaterial(sphereMesh.material, loc.adjustments);
           sphereMesh.material.needsUpdate = true;
           overlay.classList.remove('active');
         };

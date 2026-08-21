@@ -1,3 +1,5 @@
+import { ImageAdjustments, DEFAULT_ADJUSTMENTS } from './utils/imageAdjustmentEngine';
+import { ImageAdjustmentPanel } from './components/ImageAdjustmentPanel';
 import React, { useState, useEffect } from 'react';
 import {
   FolderOpen,
@@ -89,6 +91,7 @@ interface LocationItem {
   gridConfigs: Record<string, string>;
   stitchedPanoPath: string | null;
   hotspots: HotspotItem[];
+    adjustments?: ImageAdjustments;
 }
 
 export default function App() {
@@ -195,6 +198,40 @@ export default function App() {
     setActiveView(view);
     localStorage.setItem('active_view', view);
   };
+  
+  const [activeRightTab, setActiveRightTab] = useState<'stitch' | 'adjustments'>('stitch');
+
+  const handleUpdateActiveLocAdjustments = (newAdj: ImageAdjustments) => {
+    setLocations((prevLocs) =>
+      prevLocs.map((loc) =>
+        loc.id === activeLocationId
+          ? { ...loc, adjustments: newAdj }
+          : loc
+      )
+    );
+  };
+
+  const handleApplyAdjustmentsToAll = (newAdj: ImageAdjustments) => {
+    setLocations((prevLocs) =>
+      prevLocs.map((loc) => ({
+        ...loc,
+        adjustments: { ...newAdj }
+      }))
+    );
+    addLog(`Applied image adjustments to all ${locations.length} locations`);
+  };
+
+  const handleApplyAdjustmentsToSelected = (targetIds: string[], newAdj: ImageAdjustments) => {
+    setLocations((prevLocs) =>
+      prevLocs.map((loc) =>
+        targetIds.includes(loc.id)
+          ? { ...loc, adjustments: { ...newAdj } }
+          : loc
+      )
+    );
+    addLog(`Applied image adjustments to ${targetIds.length} selected locations`);
+  };
+
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState<boolean>(false);
   const [newProjectName, setNewProjectName] = useState<string>('');
@@ -1704,6 +1741,7 @@ export default function App() {
               <div id="interactive-workspace-wrapper" style={{ flex: 1, overflow: 'hidden', background: '#090a0d', position: 'relative' }}>
                 {Object.values(directions).some(arr => arr.length > 0) ? (
                   <Viewer360
+                  adjustments={activeLoc?.adjustments || DEFAULT_ADJUSTMENTS}
                     directions={directions}
                     gridConfigs={gridConfigs}
                     hotspots={activeLoc?.hotspots || []}
@@ -2071,11 +2109,64 @@ export default function App() {
 
             {/* Right Panel: Stitching Configurations */}
             <div className="studio-sidebar studio-sidebar-right">
-              <div className="sidebar-header">
-                <span>Stitch Properties</span>
-                <Cpu size={14} />
+              <div className="sidebar-header" style={{ padding: '4px 6px', display: 'flex', gap: '4px', background: '#0e1017' }}>
+                <button
+                  onClick={() => setActiveRightTab('stitch')}
+                  style={{
+                    flex: 1,
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    fontSize: '0.73rem',
+                    fontWeight: activeRightTab === 'stitch' ? 700 : 500,
+                    background: activeRightTab === 'stitch' ? '#1e2230' : 'transparent',
+                    color: activeRightTab === 'stitch' ? '#fff' : '#94a3b8',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Cpu size={13} className={activeRightTab === 'stitch' ? 'text-indigo-400' : ''} />
+                  <span>Stitch & Hotspots</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveRightTab('adjustments')}
+                  style={{
+                    flex: 1,
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    fontSize: '0.73rem',
+                    fontWeight: activeRightTab === 'adjustments' ? 700 : 500,
+                    background: activeRightTab === 'adjustments' ? '#1e2230' : 'transparent',
+                    color: activeRightTab === 'adjustments' ? '#fff' : '#94a3b8',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Sliders size={13} className={activeRightTab === 'adjustments' ? 'text-indigo-400' : ''} />
+                  <span>Adjustments</span>
+                </button>
               </div>
               <div className="sidebar-body">
+                {activeRightTab === 'adjustments' ? (
+                  <ImageAdjustmentPanel
+                    adjustments={activeLoc?.adjustments || DEFAULT_ADJUSTMENTS}
+                    onChange={handleUpdateActiveLocAdjustments}
+                    locations={locations}
+                    activeLocationId={activeLocationId}
+                    onApplyToAll={handleApplyAdjustmentsToAll}
+                    onApplyToSelected={handleApplyAdjustmentsToSelected}
+                    onAddLog={addLog}
+                  />
+                ) : (
+                  <>
                 {/* Hotspots Manager Panel */}
                 {activeLoc && (
                   <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
@@ -2216,6 +2307,8 @@ export default function App() {
                       </button>
                     </div>
                   </div>
+                )}
+                </>
                 )}
               </div>
             </div>

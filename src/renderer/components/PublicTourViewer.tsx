@@ -210,6 +210,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           gridConfigs={currentLocation?.gridConfigs || {}}
           hotspots={currentLocation?.hotspots || []}
           stitchedPanoPath={currentLocation?.stitchedPanoPath || currentLocation?.imagePath}
+          adjustments={currentLocation?.adjustments}
           onNavigate={(targetId) => {
             const targetLoc = locations.find((l: any) => l.id === targetId);
             if (targetLoc) handleLocationChange(targetLoc.id);

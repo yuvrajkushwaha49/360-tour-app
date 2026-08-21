@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react';
+import { ImageAdjustments, DEFAULT_ADJUSTMENTS, injectAdjustmentsShader } from '../utils/imageAdjustmentEngine';
+import React, { useRef, useState, useCallback } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
@@ -24,7 +25,48 @@ interface HotspotItem {
   assignedUserName?: string;
 }
 
+
+interface AdjustedMaterialProps {
+  map: THREE.Texture;
+  side?: THREE.Side;
+  adjustments?: ImageAdjustments;
+}
+
+const AdjustedMaterial: React.FC<AdjustedMaterialProps> = ({ map, side = THREE.DoubleSide, adjustments = DEFAULT_ADJUSTMENTS }) => {
+  const matRef = useRef<THREE.MeshBasicMaterial>(null);
+  const uniformsRef = useRef({
+    uBrightness: { value: 0 },
+    uContrast: { value: 0 },
+    uExposure: { value: 0 },
+    uSaturation: { value: 0 },
+    uHue: { value: 0 },
+    uTemperature: { value: 0 },
+    uSharpen: { value: 0 },
+    uVignette: { value: 0 },
+  });
+
+  useFrame(() => {
+    if (uniformsRef.current && adjustments) {
+      uniformsRef.current.uBrightness.value = adjustments.brightness || 0;
+      uniformsRef.current.uContrast.value = adjustments.contrast || 0;
+      uniformsRef.current.uExposure.value = adjustments.exposure || 0;
+      uniformsRef.current.uSaturation.value = adjustments.saturation || 0;
+      uniformsRef.current.uHue.value = adjustments.hue || 0;
+      uniformsRef.current.uTemperature.value = adjustments.temperature || 0;
+      uniformsRef.current.uSharpen.value = adjustments.sharpen || 0;
+      uniformsRef.current.uVignette.value = adjustments.vignette || 0;
+    }
+  });
+
+  const onBeforeCompile = useCallback((shader: THREE.Shader) => {
+    injectAdjustmentsShader(shader, uniformsRef);
+  }, []);
+
+  return <meshBasicMaterial ref={matRef} map={map} side={side} onBeforeCompile={onBeforeCompile} />;
+};
+
 interface TileMeshProps {
+  adjustments?: ImageAdjustments;
   imagePath: string;
   position: [number, number, number];
   rotation: [number, number, number];
@@ -32,7 +74,7 @@ interface TileMeshProps {
   onDoubleClick?: (e: any) => void;
 }
 
-const TileMesh: React.FC<TileMeshProps> = ({ imagePath, position, rotation, size, onDoubleClick }) => {
+const TileMesh: React.FC<TileMeshProps> = ({ imagePath, position, rotation, size, onDoubleClick, adjustments }) => {
   let resolvedUrl = imagePath;
   if (!imagePath) {
     resolvedUrl = '';
@@ -45,7 +87,7 @@ const TileMesh: React.FC<TileMeshProps> = ({ imagePath, position, rotation, size
     resolvedUrl = `${API_BASE_URL}/api/local-image?path=${encodeURIComponent(cleanPath)}`;
   }
 
-  const texture = useLoader(THREE.TextureLoader, resolvedUrl);
+  const texture = useLoader(THREE.TextureLoader, resolvedUrl) as THREE.Texture;
   texture.generateMipmaps = true;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
@@ -57,12 +99,12 @@ const TileMesh: React.FC<TileMeshProps> = ({ imagePath, position, rotation, size
   return (
     <mesh position={position} rotation={rotation} onDoubleClick={onDoubleClick}>
       <planeGeometry args={size} />
-      <meshBasicMaterial map={texture} side={THREE.DoubleSide} />
+      <AdjustedMaterial map={texture} side={THREE.DoubleSide} adjustments={adjustments} />
     </mesh>
   );
 };
 
-const EquirectangularPano: React.FC<{ imagePath: string }> = ({ imagePath }) => {
+const EquirectangularPano: React.FC<{ imagePath: string; adjustments?: ImageAdjustments }> = ({ imagePath, adjustments }) => {
   let resolvedUrl = imagePath;
   if (!imagePath) {
     resolvedUrl = '';
@@ -87,19 +129,20 @@ const EquirectangularPano: React.FC<{ imagePath: string }> = ({ imagePath }) => 
   return (
     <mesh scale={[-1, 1, 1]}>
       <sphereGeometry args={[500, 60, 40]} />
-      <meshBasicMaterial map={texture} side={THREE.DoubleSide} />
+      <AdjustedMaterial map={texture} side={THREE.DoubleSide} adjustments={adjustments} />
     </mesh>
   );
 };
 
 interface GridFaceProps {
+  adjustments?: ImageAdjustments;
   images: ProjectImage[];
   faceKey: string;
   gridSize: number;
   onTileDoubleClick?: (e: any) => void;
 }
 
-const GridFace: React.FC<GridFaceProps> = ({ images, faceKey, gridSize, onTileDoubleClick }) => {
+const GridFace: React.FC<GridFaceProps> = ({ images, faceKey, gridSize, onTileDoubleClick, adjustments }) => {
   const L = 1000;
   const W = L / gridSize;
   const tiles: React.ReactNode[] = [];
@@ -903,6 +946,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
 };
 
 interface Viewer360Props {
+  adjustments?: ImageAdjustments;
   directions?: Record<string, ProjectImage[]>;
   gridConfigs?: Record<string, string>;
   hotspots?: HotspotItem[];
