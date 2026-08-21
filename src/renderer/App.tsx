@@ -1166,7 +1166,8 @@ export default function App() {
       setShowSaveCrmModal(false);
       setActiveView('crm');
     } catch (err: any) {
-      addLog(`Error publishing to CRM: ${err.message}`);
+      addLog(`❌ Error publishing to CRM: ${err.message}`);
+      alert(`Failed to publish: ${err.message}`);
     } finally {
       setSavingCrm(false);
     }
