@@ -59,6 +59,8 @@ export async function loadLargeDraft<T = any>(key: string): Promise<T | null> {
   } catch {
     return safeLocalStorageGet<T>(key);
   }
+}
+
 // Delete draft from IndexedDB and localStorage
 export async function deleteLargeDraft(key: string): Promise<void> {
   try {
