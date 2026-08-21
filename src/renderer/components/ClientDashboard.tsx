@@ -334,14 +334,29 @@ export default function ClientDashboard({
     const confirmMsg = `⚠️ Are you sure you want to permanently delete "${projName}"?\n\nThis will permanently delete the project from the database and purge all its 360 images from AWS S3 Cloud Storage.`;
     if (!window.confirm(confirmMsg)) return;
 
-    try {
-      await fetch(`${API_BASE_URL}/api/projects/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-    } catch (err) {
-      console.error('Failed to delete project on server:', err);
+    if (id === 'studio-draft-in-progress') {
+      try {
+        localStorage.removeItem('studio_draft_project');
+        const req = indexedDB.open('AppLargeDraftDB', 1);
+        req.onsuccess = (e: any) => {
+          const db = e.target.result;
+          if (db.objectStoreNames.contains('drafts')) {
+            const tx = db.transaction('drafts', 'readwrite');
+            tx.objectStore('drafts').delete('studio_draft_project');
+          }
+        };
+      } catch (e) {}
+    } else {
+      try {
+        await fetch(`${API_BASE_URL}/api/projects/${id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } catch (err) {
+        console.error('Failed to delete project on server:', err);
+      }
     }
+
     setProjects(prev => prev.filter(p => p.id !== id));
     try {
       const localStr = localStorage.getItem('local_saved_projects');

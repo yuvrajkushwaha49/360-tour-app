@@ -609,7 +609,9 @@ app.delete('/api/projects/:id', authenticateToken, (req, res) => {
 
   db.get(selectQuery, params, async (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
-    if (!row) return res.status(404).json({ error: 'Project not found or unauthorized.' });
+    if (!row) {
+      return res.status(200).json({ message: 'Project already deleted or does not exist on server.' });
+    }
 
     // 1. Purge all S3 images & local uploads associated with this project
     try {
