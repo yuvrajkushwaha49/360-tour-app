@@ -463,7 +463,7 @@ app.post('/api/projects', authenticateToken, (req, res) => {
   }
 });
 
-// Save/Update project details
+// Save/Update project details (with auto-upsert if missing)
 app.put('/api/projects/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
   const { name, data, is_public, target_user_id } = req.body;
@@ -472,42 +472,65 @@ app.put('/api/projects/:id', authenticateToken, (req, res) => {
     return res.status(400).json({ error: 'Project name and data are required.' });
   }
 
-  const dataStr = JSON.stringify(data);
+  const dataStr = typeof data === 'string' ? data : JSON.stringify(data);
   const isPublicInt = is_public === false ? 0 : 1;
+  const requestedUserId = target_user_id || req.userId || 'admin-001';
 
-  if (req.userRole === 'admin') {
-    if (target_user_id) {
-      db.get('SELECT id FROM users WHERE id = ?', [target_user_id], (err, uRow) => {
-        const finalTargetUserId = uRow ? target_user_id : null;
-        db.run(
-          `UPDATE projects SET name = ?, data = ?, is_public = ?, user_id = COALESCE(?, user_id) WHERE id = ?`,
-          [name, dataStr, isPublicInt, finalTargetUserId, id],
-          function (err2) {
-            if (err2) return res.status(500).json({ error: err2.message });
-            res.json({ message: 'Project saved successfully by Admin.' });
-          }
-        );
+  // Check if project exists in database
+  db.get('SELECT * FROM projects WHERE id = ?', [id], (err, existingProj) => {
+    if (err) {
+      console.error('[Database Error]:', err.message);
+      return res.status(500).json({ error: err.message });
+    }
+
+    // Verify valid user_id to prevent foreign key errors
+    db.get('SELECT id FROM users WHERE id = ?', [requestedUserId], (errU, uRow) => {
+      let finalUserId = uRow ? requestedUserId : (existingProj ? existingProj.user_id : (req.userId || 'admin-001'));
+
+      db.get('SELECT id FROM users WHERE id = ?', [finalUserId], (errF, fRow) => {
+        if (!fRow) {
+          db.get('SELECT id FROM users LIMIT 1', [], (errL, lRow) => {
+            finalUserId = lRow ? lRow.id : 'admin-001';
+            performSave(existingProj, finalUserId);
+          });
+        } else {
+          performSave(existingProj, finalUserId);
+        }
       });
-    } else {
+    });
+  });
+
+  function performSave(existingProj, validUserId) {
+    if (existingProj) {
+      if (req.userRole !== 'admin' && existingProj.user_id !== req.userId) {
+        return res.status(403).json({ error: 'Unauthorized to modify this project.' });
+      }
+
       db.run(
-        `UPDATE projects SET name = ?, data = ?, is_public = ? WHERE id = ?`,
-        [name, dataStr, isPublicInt, id],
-        function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ message: 'Project saved successfully by Admin.' });
+        `UPDATE projects SET name = ?, data = ?, is_public = ?, user_id = ? WHERE id = ?`,
+        [name, dataStr, isPublicInt, validUserId, id],
+        function (errUpdate) {
+          if (errUpdate) {
+            console.error('[Error updating project]:', errUpdate.message);
+            return res.status(500).json({ error: errUpdate.message });
+          }
+          res.json({ message: 'Project saved successfully.', id });
+        }
+      );
+    } else {
+      // Auto-upsert if project ID did not exist in this database
+      db.run(
+        `INSERT INTO projects (id, user_id, name, data, is_public) VALUES (?, ?, ?, ?, ?)`,
+        [id, validUserId, name, dataStr, isPublicInt],
+        function (errInsert) {
+          if (errInsert) {
+            console.error('[Error inserting project]:', errInsert.message);
+            return res.status(500).json({ error: errInsert.message });
+          }
+          res.status(201).json({ message: 'Project created and saved successfully.', id });
         }
       );
     }
-  } else {
-    db.run(
-      `UPDATE projects SET name = ?, data = ?, is_public = ? WHERE id = ? AND user_id = ?`,
-      [name, dataStr, isPublicInt, id, req.userId],
-      function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(404).json({ error: 'Project not found or unauthorized.' });
-        res.json({ message: 'Project saved successfully.' });
-      }
-    );
   }
 });
 
