@@ -3,7 +3,7 @@ import React, { useRef, useState, useCallback } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
-import { RotateCw, ZoomIn, ZoomOut, Maximize2, Compass, Play, Pause, PlusCircle, XCircle, CheckCircle, MapPin, ArrowUpCircle, Info } from 'lucide-react';
+import { RotateCw, ZoomIn, ZoomOut, Maximize2, Compass, Play, Pause, PlusCircle, XCircle, CheckCircle, MapPin, ArrowUpCircle, Info, Sliders } from 'lucide-react';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
 
 interface ProjectImage {

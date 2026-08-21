@@ -31,7 +31,8 @@ import {
   UserPlus,
   ArrowLeft,
   Home,
-  Archive
+  Archive,
+  Sliders
 } from 'lucide-react';
 import Viewer360 from './components/Viewer360';
 import LoginModal from './components/LoginModal';
