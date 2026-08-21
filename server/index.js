@@ -422,23 +422,45 @@ app.post('/api/projects', authenticateToken, (req, res) => {
   }
 
   const projectId = `proj-${Date.now()}`;
-  const assignedUserId = target_user_id || req.userId;
+  const requestedUserId = target_user_id || req.userId || 'admin-001';
   const isPublicVal = is_public === false ? 0 : 1;
   const initialData = JSON.stringify(data || { locations: [], activeLocationId: '', resolution: 4096 });
 
-  db.run(
-    `INSERT INTO projects (id, user_id, name, data, is_public) VALUES (?, ?, ?, ?, ?)`,
-    [projectId, assignedUserId, name, initialData, isPublicVal],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.status(201).json({
-        message: 'Project created successfully.',
-        project: { id: projectId, user_id: assignedUserId, name, is_public: !!isPublicVal, data: data || {} }
-      });
+  // Ensure assigned user exists in users table to prevent Foreign Key constraint failure
+  db.get('SELECT id FROM users WHERE id = ?', [requestedUserId], (err, userRow) => {
+    let finalUserId = requestedUserId;
+    if (!userRow) {
+      finalUserId = req.userId || 'admin-001';
     }
-  );
+
+    db.get('SELECT id FROM users WHERE id = ?', [finalUserId], (err2, finalRow) => {
+      if (!finalRow) {
+        db.get('SELECT id FROM users LIMIT 1', [], (err3, firstRow) => {
+          finalUserId = firstRow ? firstRow.id : 'admin-001';
+          doInsert(finalUserId);
+        });
+      } else {
+        doInsert(finalUserId);
+      }
+    });
+  });
+
+  function doInsert(assignedUserId) {
+    db.run(
+      `INSERT INTO projects (id, user_id, name, data, is_public) VALUES (?, ?, ?, ?, ?)`,
+      [projectId, assignedUserId, name, initialData, isPublicVal],
+      function (err) {
+        if (err) {
+          console.error('[Error creating project]:', err.message);
+          return res.status(500).json({ error: err.message });
+        }
+        res.status(201).json({
+          message: 'Project created successfully.',
+          project: { id: projectId, user_id: assignedUserId, name, is_public: !!isPublicVal, data: data || {} }
+        });
+      }
+    );
+  }
 });
 
 // Save/Update project details
@@ -454,14 +476,28 @@ app.put('/api/projects/:id', authenticateToken, (req, res) => {
   const isPublicInt = is_public === false ? 0 : 1;
 
   if (req.userRole === 'admin') {
-    db.run(
-      `UPDATE projects SET name = ?, data = ?, is_public = ?, user_id = COALESCE(?, user_id) WHERE id = ?`,
-      [name, dataStr, isPublicInt, target_user_id, id],
-      function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Project saved successfully by Admin.' });
-      }
-    );
+    if (target_user_id) {
+      db.get('SELECT id FROM users WHERE id = ?', [target_user_id], (err, uRow) => {
+        const finalTargetUserId = uRow ? target_user_id : null;
+        db.run(
+          `UPDATE projects SET name = ?, data = ?, is_public = ?, user_id = COALESCE(?, user_id) WHERE id = ?`,
+          [name, dataStr, isPublicInt, finalTargetUserId, id],
+          function (err2) {
+            if (err2) return res.status(500).json({ error: err2.message });
+            res.json({ message: 'Project saved successfully by Admin.' });
+          }
+        );
+      });
+    } else {
+      db.run(
+        `UPDATE projects SET name = ?, data = ?, is_public = ? WHERE id = ?`,
+        [name, dataStr, isPublicInt, id],
+        function (err) {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ message: 'Project saved successfully by Admin.' });
+        }
+      );
+    }
   } else {
     db.run(
       `UPDATE projects SET name = ?, data = ?, is_public = ? WHERE id = ? AND user_id = ?`,

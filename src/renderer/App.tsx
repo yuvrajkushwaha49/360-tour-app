@@ -1134,8 +1134,12 @@ export default function App() {
     };
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/projects`, {
-        method: 'POST',
+      const isExisting = !!currentProjectId;
+      const url = isExisting ? `${API_BASE_URL}/api/projects/${currentProjectId}` : `${API_BASE_URL}/api/projects`;
+      const method = isExisting ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${authToken}`
@@ -1151,6 +1155,11 @@ export default function App() {
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.error || 'Failed to save to CRM server');
+      }
+
+      const resData = await response.json();
+      if (resData.project?.id) {
+        setCurrentProjectId(resData.project.id);
       }
 
       addLog(`Successfully published project "${crmProjectName}" to CRM Server!`);
@@ -2544,125 +2553,205 @@ export default function App() {
         >
           <div
             style={{
-              width: '100%', maxWidth: '480px', margin: '0 16px',
+              width: '100%', maxWidth: '500px', margin: '0 16px',
               background: 'linear-gradient(160deg, #13162a 0%, #1a1d30 100%)',
-              border: '1px solid rgba(139,92,246,0.3)',
+              border: '1px solid rgba(139,92,246,0.35)',
               borderRadius: '20px',
-              padding: '28px',
-              boxShadow: '0 40px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05)',
+              padding: '24px 28px',
+              boxShadow: '0 40px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.06)',
               animation: 'modalSlideIn 0.2s ease',
               color: '#fff',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '18px'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '16px', marginBottom: '18px' }}>
-              <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'linear-gradient(135deg, #8b5cf6, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px rgba(139,92,246,0.4)' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '14px' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'linear-gradient(135deg, #8b5cf6, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px rgba(139,92,246,0.4)', flexShrink: 0 }}>
                 <Database size={22} color="#fff" />
               </div>
               <div>
-                <h4 style={{ margin: 0, fontWeight: 700, fontSize: '1.08rem' }}>Publish 360 Tour to CRM</h4>
-                <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>Save tour configuration to server for client access</p>
+                <h4 style={{ margin: 0, fontWeight: 700, fontSize: '1.1rem', letterSpacing: '-0.2px' }}>Publish 360 Tour to CRM</h4>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>Save tour configuration to cloud database for client access</p>
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5">Project Name</label>
+            {/* Project Name Field */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Project Name *
+              </label>
               <input
                 type="text"
                 required
                 value={crmProjectName}
                 onChange={(e) => setCrmProjectName(e.target.value)}
                 placeholder="e.g. Luxury Apartment 360 Tour"
-                className="w-full bg-[#111216] border border-gray-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                style={{
+                  width: '100%',
+                  background: '#0d0f17',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  fontSize: '0.85rem',
+                  color: '#fff',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
               />
             </div>
 
             {/* Access Mode Selector */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 Upload & Access Mode
               </label>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <button
                   type="button"
                   onClick={() => setCrmProjectIsPublic(true)}
-                  className={`p-3 rounded-xl border text-left transition-all ${crmProjectIsPublic
-                    ? 'bg-emerald-500/15 border-emerald-500 text-white shadow-md'
-                    : 'bg-[#111216] border-gray-800 text-gray-400 hover:border-gray-700'
-                    }`}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: crmProjectIsPublic ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                    background: crmProjectIsPublic ? 'rgba(16,185,129,0.15)' : '#0d0f17',
+                    color: '#fff',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    transition: 'all 0.15s ease'
+                  }}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <Globe className="w-4 h-4 text-emerald-400" />
-                    {crmProjectIsPublic && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Globe size={16} color="#10b981" />
+                    {crmProjectIsPublic && <CheckCircle2 size={15} color="#10b981" />}
                   </div>
-                  <span className="text-xs font-bold block">🌐 Public + 🔒 Private</span>
-                  <span className="text-[10px] text-gray-400">Share link + client access</span>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fff', marginTop: '4px' }}>🌐 Public Tour</span>
+                  <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Share link + client access</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setCrmProjectIsPublic(false)}
-                  className={`p-3 rounded-xl border text-left transition-all ${!crmProjectIsPublic
-                    ? 'bg-amber-500/15 border-amber-500 text-white shadow-md'
-                    : 'bg-[#111216] border-gray-800 text-gray-400 hover:border-gray-700'
-                    }`}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: !crmProjectIsPublic ? '2px solid #f59e0b' : '1px solid rgba(255,255,255,0.1)',
+                    background: !crmProjectIsPublic ? 'rgba(245,158,11,0.15)' : '#0d0f17',
+                    color: '#fff',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    transition: 'all 0.15s ease'
+                  }}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <Lock className="w-4 h-4 text-amber-400" />
-                    {!crmProjectIsPublic && <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Lock size={16} color="#f59e0b" />
+                    {!crmProjectIsPublic && <CheckCircle2 size={15} color="#f59e0b" />}
                   </div>
-                  <span className="text-xs font-bold block">🔒 Upload Private Only</span>
-                  <span className="text-[10px] text-gray-400">ONLY assigned private client</span>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fff', marginTop: '4px' }}>🔒 Private Tour</span>
+                  <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>ONLY assigned client</span>
                 </button>
               </div>
             </div>
 
-            {/* Client Selection (Shown for Private mode or Admin) */}
+            {/* Client Assignment */}
             {currentUser?.role === 'admin' && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold text-gray-300">
-                    {!crmProjectIsPublic ? 'Assign to Private Client *' : 'Assign to Client (Optional)'}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {!crmProjectIsPublic ? 'Assign to Client *' : 'Assign to Client (Optional)'}
                   </label>
                   <button
                     type="button"
                     onClick={() => setIsAddUserModalOpen(true)}
-                    className="text-[11px] font-bold text-purple-400 hover:text-purple-300 flex items-center space-x-1 hover:underline"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#a78bfa',
+                      fontSize: '0.74rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: 0
+                    }}
                   >
-                    <UserPlus className="w-3.5 h-3.5" />
+                    <UserPlus size={13} />
                     <span>+ Add New Client</span>
                   </button>
                 </div>
                 <select
                   value={selectedClientId}
                   onChange={(e) => setSelectedClientId(e.target.value)}
-                  className="w-full bg-[#111216] border border-gray-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                  style={{
+                    width: '100%',
+                    background: '#0d0f17',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: '10px',
+                    padding: '10px 14px',
+                    fontSize: '0.82rem',
+                    color: '#fff',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
                 >
-                  {clientUsersList.length === 0 ? (
-                    <option value={currentUser.id}>Assign to Myself ({currentUser.name})</option>
-                  ) : (
-                    clientUsersList.map(c => (
-                      <option key={c.id} value={c.id}>
-                        👤 {c.name} ({c.email})
-                      </option>
-                    ))
-                  )}
+                  <option value="">-- Select Client Account --</option>
+                  {clientUsersList.map(c => (
+                    <option key={c.id} value={c.id}>
+                      👤 {c.name} ({c.email})
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
 
-            <div className="flex justify-end space-x-3 pt-2">
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
               <button
+                type="button"
                 onClick={() => setShowSaveCrmModal(false)}
-                className="py-2 px-4 bg-gray-800 text-gray-300 hover:text-white rounded-xl text-xs font-semibold transition-colors"
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '10px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#94a3b8',
+                  cursor: 'pointer'
+                }}
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleSaveToCrmServer}
                 disabled={savingCrm || !crmProjectName.trim()}
-                className="py-2 px-5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-semibold shadow transition-all disabled:opacity-50"
+                style={{
+                  padding: '9px 22px',
+                  borderRadius: '10px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                  border: 'none',
+                  color: '#fff',
+                  boxShadow: '0 4px 14px rgba(139,92,246,0.4)',
+                  cursor: savingCrm || !crmProjectName.trim() ? 'not-allowed' : 'pointer',
+                  opacity: savingCrm || !crmProjectName.trim() ? 0.6 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
               >
-                {savingCrm ? 'Publishing...' : 'Publish to CRM Server'}
+                <Database size={15} />
+                <span>{savingCrm ? 'Publishing...' : 'Publish to CRM Server'}</span>
               </button>
             </div>
           </div>
