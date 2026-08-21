@@ -1,12 +1,12 @@
 // Live AWS Server IP
-export const AWS_SERVER_URL = 'http://13.206.71.115';
+export const AWS_SERVER_URL = 'http://35.154.65.44';
 
 // Dynamic API Base URL resolver: connects to AWS live server from both cloud and localhost
 export function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     // When running directly on the AWS web server domain/IP, use relative URL (Nginx handles proxying)
-    if (hostname === '13.206.71.115' || (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && !window.location.protocol.startsWith('file'))) {
+    if (hostname === '35.154.65.44' || (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && !window.location.protocol.startsWith('file'))) {
       return '';
     }
   }
