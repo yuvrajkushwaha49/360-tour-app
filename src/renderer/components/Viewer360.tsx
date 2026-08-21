@@ -1023,6 +1023,7 @@ const CameraZoomEffect: React.FC<{ isZooming: boolean; targetPos: [number, numbe
 };
 
 export const Viewer360: React.FC<Viewer360Props> = ({
+  adjustments = DEFAULT_ADJUSTMENTS,
   directions = { F: [], B: [], L: [], R: [], U: [], D: [] },
   gridConfigs = {},
   hotspots = [],
