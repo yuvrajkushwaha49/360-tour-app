@@ -495,7 +495,7 @@ export async function exportProjectToZip(
       const container = document.getElementById('canvas-container');
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
-      camera.position.set(0, 0, 0.1);
+      camera.position.set(0, 0, -0.01);
 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
       renderer.setPixelRatio(window.devicePixelRatio || 1);
@@ -693,6 +693,13 @@ export async function exportProjectToZip(
           overlay.classList.remove('active');
         };
         img.src = imgPath;
+
+        if (controls) {
+          camera.position.set(0, 0, -0.01);
+          controls.target.set(0, 0, 0);
+          camera.lookAt(0, 0, 0);
+          controls.update();
+        }
 
         renderHotspots(loc.hotspots || []);
         renderRoomTabs();

@@ -1171,6 +1171,17 @@ export const Viewer360: React.FC<Viewer360Props> = ({
     };
   }, []);
 
+  // Reset camera view towards FRONT face (+Z) whenever switching rooms/locations
+  React.useEffect(() => {
+    if (controlsRef.current) {
+      const camera = controlsRef.current.object;
+      camera.position.set(0, 0, -0.01);
+      controlsRef.current.target.set(0, 0, 0);
+      camera.lookAt(0, 0, 0);
+      controlsRef.current.update();
+    }
+  }, [directions, stitchedPanoPath]);
+
   const handleZoomIn = () => {
     if (controlsRef.current) {
       const camera = controlsRef.current.object;
@@ -1193,27 +1204,37 @@ export const Viewer360: React.FC<Viewer360Props> = ({
       if (!document.fullscreenElement) {
         element.requestFullscreen().catch(err => console.error(err));
       } else {
-        document.exitFullscreen();
+        document.exitFullscreen().catch(err => console.error(err));
       }
     }
   };
 
   return (
-    <div id="viewer-canvas-container" className="viewer-wrapper" style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div
+      id="viewer-canvas-container"
+      style={{
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+        cursor: isDrawingArea ? 'crosshair' : (isPlacingHotspot ? 'crosshair' : 'grab'),
+        background: '#07080f',
+        overflow: 'hidden'
+      }}
+    >
       {/* Soft Light VR Blur Transition Overlay */}
       <div
         className={`absolute inset-0 z-40 bg-black/10 pointer-events-none transition-all duration-300 ${isBlurring ? 'opacity-100 backdrop-blur-[1px]' : 'opacity-0 backdrop-blur-none'
           }`}
       />
 
-      {/* Sleek Minimal Preloader Overlay (Zero Text, Fast & Clean) */}
+      {/* Loading Spinners */}
       {isPreloading && (
         <div className="absolute inset-0 z-50 bg-[#07080f]/90 backdrop-blur-md flex items-center justify-center pointer-events-none transition-opacity duration-300">
           <div className="w-10 h-10 border-3 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
         </div>
       )}
 
-      <Canvas camera={{ position: [0, 0, 1], fov: 75 }}>
+      <Canvas camera={{ position: [0, 0, -0.01], fov: 75 }}>
         <CameraZoomEffect isZooming={isZooming} targetPos={zoomTargetPos} controlsRef={controlsRef} />
         <ambientLight intensity={1.5} />
         <SceneGroup
