@@ -46,23 +46,55 @@ const AdjustedMaterial: React.FC<AdjustedMaterialProps> = ({ map, side = THREE.D
   });
 
   useFrame(() => {
-    if (uniformsRef.current && adjustments) {
-      uniformsRef.current.uBrightness.value = adjustments.brightness || 0;
-      uniformsRef.current.uContrast.value = adjustments.contrast || 0;
-      uniformsRef.current.uExposure.value = adjustments.exposure || 0;
-      uniformsRef.current.uSaturation.value = adjustments.saturation || 0;
-      uniformsRef.current.uHue.value = adjustments.hue || 0;
-      uniformsRef.current.uTemperature.value = adjustments.temperature || 0;
-      uniformsRef.current.uSharpen.value = adjustments.sharpen || 0;
-      uniformsRef.current.uVignette.value = adjustments.vignette || 0;
+    if (adjustments) {
+      const b = adjustments.brightness || 0;
+      const c = adjustments.contrast || 0;
+      const exp = adjustments.exposure || 0;
+      const s = adjustments.saturation || 0;
+      const h = adjustments.hue || 0;
+      const t = adjustments.temperature || 0;
+      const sh = adjustments.sharpen || 0;
+      const v = adjustments.vignette || 0;
+
+      uniformsRef.current.uBrightness.value = b;
+      uniformsRef.current.uContrast.value = c;
+      uniformsRef.current.uExposure.value = exp;
+      uniformsRef.current.uSaturation.value = s;
+      uniformsRef.current.uHue.value = h;
+      uniformsRef.current.uTemperature.value = t;
+      uniformsRef.current.uSharpen.value = sh;
+      uniformsRef.current.uVignette.value = v;
+
+      if (matRef.current && (matRef.current as any).userData?.shader?.uniforms) {
+        const u = (matRef.current as any).userData.shader.uniforms;
+        if (u.uBrightness) u.uBrightness.value = b;
+        if (u.uContrast) u.uContrast.value = c;
+        if (u.uExposure) u.uExposure.value = exp;
+        if (u.uSaturation) u.uSaturation.value = s;
+        if (u.uHue) u.uHue.value = h;
+        if (u.uTemperature) u.uTemperature.value = t;
+        if (u.uSharpen) u.uSharpen.value = sh;
+        if (u.uVignette) u.uVignette.value = v;
+      }
     }
   });
 
   const onBeforeCompile = useCallback((shader: THREE.Shader) => {
+    if (matRef.current) {
+      (matRef.current as any).userData.shader = shader;
+    }
     injectAdjustmentsShader(shader, uniformsRef);
   }, []);
 
-  return <meshBasicMaterial ref={matRef} map={map} side={side} onBeforeCompile={onBeforeCompile} />;
+  return (
+    <meshBasicMaterial
+      ref={matRef}
+      map={map}
+      side={side}
+      onBeforeCompile={onBeforeCompile}
+      customProgramCacheKey={() => 'adjusted_360_material_v1'}
+    />
+  );
 };
 
 interface TileMeshProps {
@@ -197,6 +229,7 @@ const GridFace: React.FC<GridFaceProps> = ({ images, faceKey, gridSize, onTileDo
           rotation={rot}
           size={[W, W]}
           onDoubleClick={onTileDoubleClick}
+          adjustments={adjustments}
         />
       );
     }
@@ -472,6 +505,7 @@ const RoadArrowBanner = ({
 };
 
 interface SceneGroupProps {
+  adjustments?: ImageAdjustments;
   directions: Record<string, ProjectImage[]>;
   gridConfigs: Record<string, string>;
   hotspots: HotspotItem[];
@@ -492,6 +526,7 @@ interface SceneGroupProps {
 }
 
 const SceneGroup: React.FC<SceneGroupProps> = ({
+  adjustments,
   directions,
   gridConfigs,
   hotspots,
@@ -591,6 +626,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
             faceKey={faceKey}
             gridSize={getGridSize(faceKey)}
             onTileDoubleClick={handleGroupClick}
+            adjustments={adjustments}
           />
         </React.Suspense>
       ))}
@@ -1180,6 +1216,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
         <CameraZoomEffect isZooming={isZooming} targetPos={zoomTargetPos} controlsRef={controlsRef} />
         <ambientLight intensity={1.5} />
         <SceneGroup
+          adjustments={adjustments}
           directions={directions}
           gridConfigs={gridConfigs}
           hotspots={hotspots}
