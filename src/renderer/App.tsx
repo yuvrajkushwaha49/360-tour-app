@@ -1480,6 +1480,19 @@ export default function App() {
                 <Database size={14} /> Publish to CRM DB
               </button>
               <button
+                className={`btn btn-sm rounded-3 px-3 d-flex align-items-center gap-1.5 ${activeRightTab === 'adjustments' ? 'btn-primary' : 'btn-outline-secondary text-white'}`}
+                style={{
+                  background: activeRightTab === 'adjustments' ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : undefined,
+                  border: activeRightTab === 'adjustments' ? 'none' : undefined,
+                  fontWeight: 600
+                }}
+                onClick={() => setActiveRightTab('adjustments')}
+                title="Open Image Adjustments & Color Grading Panel"
+              >
+                <Sliders size={14} className={activeRightTab === 'adjustments' ? 'text-white' : 'text-indigo-400'} />
+                <span>Adjustments</span>
+              </button>
+              <button
                 className="btn btn-sm btn-outline-success text-white rounded-3 px-3 d-flex align-items-center gap-1"
                 onClick={handleExportWebZip}
                 disabled={isExportingZip}
@@ -1763,6 +1776,7 @@ export default function App() {
                     }}
                     onAddAreaOutline={handleStartDrawingAreaForHotspot}
                     areaType={areaType}
+                    onOpenAdjustments={() => setActiveRightTab('adjustments')}
                   />
                 ) : (
                   <div className="viewer-placeholder" style={{ height: '100%', padding: '20px' }}>
@@ -2107,28 +2121,29 @@ export default function App() {
               </div>
             </div>
 
-            {/* Right Panel: Stitching Configurations */}
+            {/* Right Panel: Stitching & Adjustments */}
             <div className="studio-sidebar studio-sidebar-right">
-              <div className="sidebar-header" style={{ padding: '4px 6px', display: 'flex', gap: '4px', background: '#0e1017' }}>
+              <div className="sidebar-header" style={{ padding: '6px 8px', display: 'flex', gap: '6px', background: '#090a0f', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                 <button
                   onClick={() => setActiveRightTab('stitch')}
                   style={{
                     flex: 1,
-                    padding: '6px 8px',
+                    padding: '8px 10px',
                     borderRadius: '6px',
-                    fontSize: '0.73rem',
+                    fontSize: '0.75rem',
                     fontWeight: activeRightTab === 'stitch' ? 700 : 500,
-                    background: activeRightTab === 'stitch' ? '#1e2230' : 'transparent',
+                    background: activeRightTab === 'stitch' ? 'linear-gradient(135deg, #1e2438, #2a314d)' : 'transparent',
                     color: activeRightTab === 'stitch' ? '#fff' : '#94a3b8',
-                    border: 'none',
+                    border: activeRightTab === 'stitch' ? '1px solid rgba(99,102,241,0.4)' : '1px solid transparent',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '4px'
+                    gap: '6px',
+                    transition: 'all 0.15s ease'
                   }}
                 >
-                  <Cpu size={13} className={activeRightTab === 'stitch' ? 'text-indigo-400' : ''} />
+                  <Cpu size={14} className={activeRightTab === 'stitch' ? 'text-indigo-400' : ''} />
                   <span>Stitch & Hotspots</span>
                 </button>
 
@@ -2136,21 +2151,23 @@ export default function App() {
                   onClick={() => setActiveRightTab('adjustments')}
                   style={{
                     flex: 1,
-                    padding: '6px 8px',
+                    padding: '8px 10px',
                     borderRadius: '6px',
-                    fontSize: '0.73rem',
+                    fontSize: '0.75rem',
                     fontWeight: activeRightTab === 'adjustments' ? 700 : 500,
-                    background: activeRightTab === 'adjustments' ? '#1e2230' : 'transparent',
+                    background: activeRightTab === 'adjustments' ? 'linear-gradient(135deg, #4f46e5, #6366f1)' : 'transparent',
                     color: activeRightTab === 'adjustments' ? '#fff' : '#94a3b8',
-                    border: 'none',
+                    border: activeRightTab === 'adjustments' ? '1px solid #818cf8' : '1px solid transparent',
+                    boxShadow: activeRightTab === 'adjustments' ? '0 2px 10px rgba(99,102,241,0.35)' : 'none',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '4px'
+                    gap: '6px',
+                    transition: 'all 0.15s ease'
                   }}
                 >
-                  <Sliders size={13} className={activeRightTab === 'adjustments' ? 'text-indigo-400' : ''} />
+                  <Sliders size={14} className={activeRightTab === 'adjustments' ? 'text-white' : 'text-indigo-400'} />
                   <span>Adjustments</span>
                 </button>
               </div>

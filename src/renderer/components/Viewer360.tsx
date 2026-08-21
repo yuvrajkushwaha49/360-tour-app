@@ -965,6 +965,7 @@ interface Viewer360Props {
   onAddAreaOutline?: (hs: HotspotItem) => void;
   areaType?: 'building' | 'river' | 'road';
   readOnly?: boolean;
+  onOpenAdjustments?: () => void;
 }
 
 const CameraZoomEffect: React.FC<{ isZooming: boolean; targetPos: [number, number, number] | null; controlsRef: any }> = ({ isZooming, targetPos, controlsRef }) => {
@@ -1003,7 +1004,8 @@ export const Viewer360: React.FC<Viewer360Props> = ({
   onDeleteHotspot = () => { },
   onAddAreaOutline = () => { },
   areaType = 'building',
-  readOnly = false
+  readOnly = false,
+  onOpenAdjustments
 }) => {
   const [autoRotate, setAutoRotate] = useState(false);
   const [heading, setHeading] = useState(0);
@@ -1248,6 +1250,27 @@ export const Viewer360: React.FC<Viewer360Props> = ({
                 >
                   <PlusCircle size={16} /> + Area Outline
                 </button>
+                {onOpenAdjustments && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={onOpenAdjustments}
+                    title="Open Image Adjustments & Filters"
+                    style={{
+                      borderRadius: '20px',
+                      background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                      color: '#fff',
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '4px 12px',
+                      fontWeight: 600,
+                      boxShadow: '0 2px 8px rgba(99,102,241,0.3)'
+                    }}
+                  >
+                    <Sliders size={14} /> Adjustments
+                  </button>
+                )}
               </>
             ) : (
               <button
