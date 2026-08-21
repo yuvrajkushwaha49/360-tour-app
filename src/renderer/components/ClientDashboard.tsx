@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { exportProjectToZip } from '../utils/exportZip';
 import { API_BASE_URL } from '../utils/apiConfig';
-import { loadLargeDraft } from '../utils/dbStorage';
+import { loadLargeDraft, deleteLargeDraft } from '../utils/dbStorage';
 
 interface ProjectItem {
   id: string;
@@ -101,6 +101,7 @@ export default function ClientDashboard({
   const [activeDashboardTab, setActiveDashboardTab] = useState<'projects' | 'users'>('projects');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type?: 'success' | 'info' | 'error' } | null>(null);
 
   // Edit Project Modal States (Admin Only)
   const [editingProject, setEditingProject] = useState<ProjectItem | null>(null);
@@ -331,20 +332,14 @@ export default function ClientDashboard({
   const deleteProject = async (id: string) => {
     const proj = projects.find(p => p.id === id);
     const projName = proj ? proj.name : 'this 360 tour project';
-    const confirmMsg = `⚠️ Are you sure you want to permanently delete "${projName}"?\n\nThis will permanently delete the project from the database and purge all its 360 images from AWS S3 Cloud Storage.`;
+    const confirmMsg = `⚠️ Are you sure you want to permanently delete "${projName}"?\n\nThis will permanently delete the project and purge all its 360 images.`;
     if (!window.confirm(confirmMsg)) return;
 
-    if (id === 'studio-draft-in-progress') {
+    if (id === 'studio-draft-in-progress' || id.includes('draft')) {
       try {
+        await deleteLargeDraft('studio_draft_project');
         localStorage.removeItem('studio_draft_project');
-        const req = indexedDB.open('AppLargeDraftDB', 1);
-        req.onsuccess = (e: any) => {
-          const db = e.target.result;
-          if (db.objectStoreNames.contains('drafts')) {
-            const tx = db.transaction('drafts', 'readwrite');
-            tx.objectStore('drafts').delete('studio_draft_project');
-          }
-        };
+        window.dispatchEvent(new CustomEvent('clear-studio-draft'));
       } catch (e) {}
     } else {
       try {
@@ -365,6 +360,15 @@ export default function ClientDashboard({
         localStorage.setItem('local_saved_projects', JSON.stringify(list));
       }
     } catch (e) {}
+
+    // Show beautiful Toast notification
+    setToast({
+      message: `Project "${projName}" deleted successfully!`,
+      type: 'success'
+    });
+    setTimeout(() => {
+      setToast(null);
+    }, 3500);
   };
 
   const copyShareLink = (tourId: string) => {
@@ -1018,6 +1022,47 @@ export default function ClientDashboard({
               </div>
             </form>
           </div>
+        </div>
+      )}
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '28px',
+            right: '28px',
+            zIndex: 99999,
+            background: 'linear-gradient(135deg, #1e1b4b, #0f172a)',
+            border: '1px solid rgba(99,102,241,0.5)',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.7), 0 0 15px rgba(99,102,241,0.35)',
+            borderRadius: '14px',
+            padding: '14px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            color: '#fff',
+            fontSize: '0.88rem',
+            fontWeight: 600,
+            animation: 'modalSlideIn 0.25s ease'
+          }}
+        >
+          <span style={{ fontSize: '1.2rem' }}>🗑️</span>
+          <span>{toast.message}</span>
+          <button
+            onClick={() => setToast(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              marginLeft: '8px',
+              padding: '2px',
+              display: 'flex',
+              alignItems: 'center'
+            }}
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
     </div>

@@ -42,7 +42,7 @@ import AddUserModal from './components/AddUserModal';
 import ClientLoginPage from './components/ClientLoginPage';
 import { exportProjectToZip } from './utils/exportZip';
 import { API_BASE_URL } from './utils/apiConfig';
-import { saveLargeDraft, loadLargeDraft, safeLocalStorageSet, safeLocalStorageGet } from './utils/dbStorage';
+import { saveLargeDraft, loadLargeDraft, deleteLargeDraft, safeLocalStorageSet, safeLocalStorageGet } from './utils/dbStorage';
 
 interface ProjectImage {
   name: string;
@@ -151,6 +151,21 @@ export default function App() {
         }
       }
     });
+  }, []);
+
+  // Listen for clear-studio-draft event from Dashboard to reset in-memory draft
+  useEffect(() => {
+    const handleClearDraft = () => {
+      setLocations([]);
+      setActiveLocationId('');
+      setProjectDir('');
+      setCurrentProjectId(null);
+      setCrmProjectName('');
+      deleteLargeDraft('studio_draft_project');
+      try { localStorage.removeItem('studio_draft_project'); } catch (e) {}
+    };
+    window.addEventListener('clear-studio-draft', handleClearDraft);
+    return () => window.removeEventListener('clear-studio-draft', handleClearDraft);
   }, []);
 
   // Auto-save Studio project draft state to IndexedDB safely on every change

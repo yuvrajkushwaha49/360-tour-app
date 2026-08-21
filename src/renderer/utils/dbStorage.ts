@@ -59,6 +59,21 @@ export async function loadLargeDraft<T = any>(key: string): Promise<T | null> {
   } catch {
     return safeLocalStorageGet<T>(key);
   }
+// Delete draft from IndexedDB and localStorage
+export async function deleteLargeDraft(key: string): Promise<void> {
+  try {
+    const db = await getDB();
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch (e) {}
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {}
 }
 
 // Safe localStorage set with try-catch to prevent QuotaExceededError crashes
