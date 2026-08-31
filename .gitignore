@@ -1,1 +1,27 @@
 node_modules
+dist
+dist-renderer
+.env
+.env.local
+
+# SQLite Database files (NEVER commit or overwrite production database)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+crm.db
+server/crm.db
+database.sqlite
+
+# Uploaded Assets
+uploads
+uploads/
+server/uploads
+server/uploads/
+
+# OS and Temp files
+.DS_Store
+Thumbs.db
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

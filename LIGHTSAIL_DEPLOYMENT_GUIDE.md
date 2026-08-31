@@ -278,17 +278,18 @@ http://YOUR_LIGHTSAIL_STATIC_IP
 
 ## Step 10: Future Update & Redeployment Cheat Sheet
 
-Whenever you make changes on your local PC and push to GitHub, run this single block on Lightsail to deploy updates:
+Whenever you make changes on your local PC and push to GitHub, run this safe command block on Lightsail to deploy updates **without overwriting your database or uploads**:
 
 ```bash
 cd /var/www/360-tour-app
-git reset --hard HEAD
-git clean -fd
 git pull
 pm2 restart all
 NODE_OPTIONS="--max-old-space-size=1536" npm run build:renderer
 sudo systemctl restart nginx
 ```
+
+> [!IMPORTANT]
+> **Database Safety**: `crm.db` is now in `.gitignore`. Git will **never** overwrite or delete your live server database, users, or projects when you run `git pull`.
 
 ---
 
