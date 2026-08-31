@@ -41,7 +41,7 @@ import PublicTourViewer from './components/PublicTourViewer';
 import AddUserModal from './components/AddUserModal';
 import ClientLoginPage from './components/ClientLoginPage';
 import { exportProjectToZip } from './utils/exportZip';
-import { API_BASE_URL } from './utils/apiConfig';
+import { API_BASE_URL, toCloudFrontUrl } from './utils/apiConfig';
 import { saveLargeDraft, loadLargeDraft, deleteLargeDraft, safeLocalStorageSet, safeLocalStorageGet } from './utils/dbStorage';
 
 interface ProjectImage {
@@ -73,12 +73,19 @@ interface HotspotItem {
   id: string;
   targetLocationId?: string;
   name: string;
+  subtitle?: string; // e.g. "5 km" or "101 km"
+  category?: string; // e.g. "Industrial" | "Residential" | "Commercial" | "Infrastructure" | "Connectivity"
   area?: string;
   description?: string;
   position: [number, number, number];
   polygonPoints?: [number, number, number][];
-  icon?: 'arrow' | 'pin' | 'info';
+  icon?: string;
+  customIconUrl?: string; // Uploaded custom PNG/SVG URL
+  beaconColor?: string; // e.g. '#6366f1' | '#a855f7' | '#06b6d4' | '#10b981' | '#f59e0b'
   areaType?: 'building' | 'river' | 'road';
+  isPublic?: boolean;
+  assignedUserId?: string;
+  assignedUserName?: string;
 }
 
 interface LocationItem {
@@ -128,7 +135,12 @@ export default function App() {
   const [drawingPoints, setDrawingPoints] = useState<[number, number, number][]>([]);
   const [isDrawingArea, setIsDrawingArea] = useState<boolean>(false);
   const [editingHotspotId, setEditingHotspotId] = useState<string | null>(null);
-  const [hotspotIcon, setHotspotIcon] = useState<'arrow' | 'pin' | 'info'>('arrow');
+  const [hotspotIcon, setHotspotIcon] = useState<string>('building');
+  const [hotspotSubtitle, setHotspotSubtitle] = useState<string>('');
+  const [hotspotCategory, setHotspotCategory] = useState<string>('Commercial');
+  const [hotspotCustomIconUrl, setHotspotCustomIconUrl] = useState<string>('');
+  const [hotspotBeaconColor, setHotspotBeaconColor] = useState<string>('#a855f7');
+  const [isUploadingCustomIcon, setIsUploadingCustomIcon] = useState<boolean>(false);
   const [areaType, setAreaType] = useState<'building' | 'river' | 'road'>('building');
   const [hotspotIsPublic, setHotspotIsPublic] = useState<boolean>(true);
   const [hotspotUserId, setHotspotUserId] = useState<string>('');
@@ -776,6 +788,10 @@ export default function App() {
                   ? {
                     ...h,
                     name: hotspotName,
+                    subtitle: hotspotSubtitle.trim() || undefined,
+                    category: hotspotCategory || undefined,
+                    customIconUrl: hotspotCustomIconUrl.trim() || undefined,
+                    beaconColor: hotspotBeaconColor || '#a855f7',
                     targetLocationId: targetId,
                     area: landmarkArea.trim() || undefined,
                     description: landmarkDesc.trim() || undefined,
@@ -794,6 +810,10 @@ export default function App() {
               id: `hs-${Date.now()}`,
               targetLocationId: targetId,
               name: hotspotName,
+              subtitle: hotspotSubtitle.trim() || undefined,
+              category: hotspotCategory || undefined,
+              customIconUrl: hotspotCustomIconUrl.trim() || undefined,
+              beaconColor: hotspotBeaconColor || '#a855f7',
               area: landmarkArea.trim() || undefined,
               description: landmarkDesc.trim() || undefined,
               position: pos!,
@@ -829,21 +849,60 @@ export default function App() {
       setIsPlacingHotspot(false);
       setIsDrawingArea(false);
       setNewLinkRoomName('');
+      setHotspotSubtitle('');
+      setHotspotCustomIconUrl('');
+      setHotspotBeaconColor('#a855f7');
       setLandmarkArea('');
       setLandmarkDesc('');
       setDrawingPoints([]);
     }
   };
 
+  const handleCustomIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingCustomIcon(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const token = authToken || localStorage.getItem('crm_token');
+      const response = await fetch(`${API_BASE_URL}/api/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload custom icon');
+      }
+
+      const data = await response.json();
+      const iconUrl = data.url || data.path;
+      setHotspotCustomIconUrl(iconUrl);
+      addLog(`Custom icon uploaded successfully: ${file.name}`);
+    } catch (err: any) {
+      console.error('Custom icon upload error:', err);
+      alert('Error uploading custom icon: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsUploadingCustomIcon(false);
+    }
+  };
+
   const handleEditHotspotClick = (hs: HotspotItem) => {
     setEditingHotspotId(hs.id);
     setNewLinkRoomName(hs.name);
+    setHotspotSubtitle(hs.subtitle || '');
+    setHotspotCategory(hs.category || 'Commercial');
+    setHotspotCustomIconUrl(hs.customIconUrl || '');
+    setHotspotBeaconColor(hs.beaconColor || '#a855f7');
     setLinkToRoom(!!hs.targetLocationId);
     setSelectedTargetId(hs.targetLocationId || '');
     setHotspotMode(hs.targetLocationId ? 'existing' : 'new');
     setLandmarkArea(hs.area || '');
     setLandmarkDesc(hs.description || '');
-    setHotspotIcon(hs.icon || (hs.targetLocationId ? 'arrow' : 'info'));
+    setHotspotIcon(hs.icon || (hs.targetLocationId ? 'arrow' : 'building'));
     setAreaType(hs.areaType || 'building');
     setHotspotIsPublic(hs.isPublic !== undefined ? hs.isPublic : true);
     setHotspotUserId(hs.assignedUserId || '');
@@ -1853,52 +1912,162 @@ export default function App() {
                       </h3>
 
                       {/* Hotspot Name Input */}
-                      <div className="form-group">
-                        <label className="form-label">Hotspot / Location Name</label>
+                      <div className="form-group mb-3">
+                        <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Hotspot / Location Title *</label>
                         <input
                           type="text"
                           className="form-input"
-                          placeholder="e.g. Master Bedroom, Swimming Pool"
+                          placeholder="e.g. ABCD Building, Water Treatment Plant"
                           value={newLinkRoomName}
                           onChange={(e) => setNewLinkRoomName(e.target.value)}
                           autoFocus
                         />
                       </div>
 
-                      {/* Hotspot Icon Selector */}
-                      <div className="form-group">
-                        <label className="form-label">Select Hotspot Icon</label>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          {[
-                            { value: 'arrow', label: '➜ Arrow' },
-                            { value: 'pin', label: '📍 Pin' },
-                            { value: 'info', label: 'ℹ Info' }
-                          ].map(opt => (
+                      {/* Subtitle / Distance Badge Input */}
+                      <div className="form-group mb-3">
+                        <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                          Distance / Subtitle Badge <span style={{ color: '#94a3b8', fontWeight: 400 }}>(e.g. 5 km, Phase 1)</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="e.g. 5 km, 101 km, 8.5 km, Commercial Zone"
+                          value={hotspotSubtitle}
+                          onChange={(e) => setHotspotSubtitle(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Manual Custom Icon Upload */}
+                      <div className="form-group mb-3" style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <label className="form-label mb-0" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Custom Icon Upload (PNG/SVG)</label>
+                          {hotspotCustomIconUrl && (
                             <button
-                              key={opt.value}
                               type="button"
-                              onClick={() => setHotspotIcon(opt.value as any)}
+                              onClick={() => setHotspotCustomIconUrl('')}
+                              style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer' }}
+                            >
+                              ✕ Remove
+                            </button>
+                          )}
+                        </div>
+
+                        {hotspotCustomIconUrl ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <img
+                              src={hotspotCustomIconUrl.startsWith('http') || hotspotCustomIconUrl.startsWith('data:') ? toCloudFrontUrl(hotspotCustomIconUrl) : `${API_BASE_URL}${hotspotCustomIconUrl.startsWith('/') ? '' : '/'}${hotspotCustomIconUrl}`}
+                              alt="Custom Icon"
+                              style={{ width: '36px', height: '36px', objectFit: 'contain', background: 'rgba(0,0,0,0.4)', borderRadius: '6px', padding: '4px', border: '1px solid rgba(255,255,255,0.2)' }}
+                            />
+                            <span style={{ fontSize: '0.75rem', color: '#10b981' }}>✓ Custom Icon Active</span>
+                          </div>
+                        ) : (
+                          <div>
+                            <input
+                              type="file"
+                              accept="image/png, image/svg+xml, image/webp, image/jpeg"
+                              id="hotspot-custom-icon-file"
+                              style={{ display: 'none' }}
+                              onChange={handleCustomIconUpload}
+                            />
+                            <label
+                              htmlFor="hotspot-custom-icon-file"
                               style={{
-                                flex: 1,
-                                padding: '8px',
-                                borderRadius: '4px',
-                                border: hotspotIcon === opt.value ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                                background: hotspotIcon === opt.value ? 'rgba(99, 102, 241, 0.15)' : 'var(--bg-tertiary)',
-                                color: 'white',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: 'rgba(99, 102, 241, 0.15)',
+                                border: '1px dashed rgba(99, 102, 241, 0.5)',
+                                color: '#a5b4fc',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
                                 fontSize: '0.75rem',
                                 cursor: 'pointer',
-                                fontWeight: hotspotIcon === opt.value ? 'bold' : 'normal',
-                                textAlign: 'center',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '4px',
-                                transition: 'all 0.1s ease'
+                                width: '100%',
+                                justifyContent: 'center'
                               }}
                             >
-                              <span style={{ fontSize: '0.9rem' }}>{opt.label.split(' ')[0]}</span>
-                              <span>{opt.label.split(' ')[1]}</span>
-                            </button>
+                              {isUploadingCustomIcon ? '⏳ Uploading...' : '📤 Click to Upload Custom Icon (PNG/SVG)'}
+                            </label>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Built-in Preset Icon Selector */}
+                      {!hotspotCustomIconUrl && (
+                        <div className="form-group mb-3">
+                          <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Or Select Category Icon Preset</label>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', maxHeight: '130px', overflowY: 'auto' }}>
+                            {[
+                              { value: 'building', label: '🏢 Building' },
+                              { value: 'airport', label: '✈️ Airport' },
+                              { value: 'factory', label: '🏭 Industry' },
+                              { value: 'energy', label: '⚡ Energy' },
+                              { value: 'water', label: '💧 Water' },
+                              { value: 'food', label: '🍽️ Food' },
+                              { value: 'canal', label: '🌊 Canal' },
+                              { value: 'nature', label: '🌳 Green' },
+                              { value: 'road', label: '🛣️ Road' },
+                              { value: 'arrow', label: '➜ Arrow' },
+                              { value: 'pin', label: '📍 Pin' },
+                              { value: 'info', label: 'ℹ Info' }
+                            ].map(opt => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => setHotspotIcon(opt.value)}
+                                style={{
+                                  padding: '6px 4px',
+                                  borderRadius: '6px',
+                                  border: hotspotIcon === opt.value ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                                  background: hotspotIcon === opt.value ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-tertiary)',
+                                  color: 'white',
+                                  fontSize: '0.7rem',
+                                  cursor: 'pointer',
+                                  fontWeight: hotspotIcon === opt.value ? 'bold' : 'normal',
+                                  textAlign: 'center',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '2px'
+                                }}
+                              >
+                                <span style={{ fontSize: '1rem' }}>{opt.label.split(' ')[0]}</span>
+                                <span style={{ fontSize: '0.65rem' }}>{opt.label.split(' ')[1]}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Beacon Glow Color Theme */}
+                      <div className="form-group mb-3">
+                        <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Beacon Glow Theme Color</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {[
+                            { color: '#a855f7', label: 'Violet' },
+                            { color: '#06b6d4', label: 'Cyan' },
+                            { color: '#10b981', label: 'Green' },
+                            { color: '#f59e0b', label: 'Amber' },
+                            { color: '#f43f5e', label: 'Rose' }
+                          ].map(item => (
+                            <button
+                              key={item.color}
+                              type="button"
+                              onClick={() => setHotspotBeaconColor(item.color)}
+                              style={{
+                                flex: 1,
+                                height: '28px',
+                                borderRadius: '6px',
+                                background: item.color,
+                                border: hotspotBeaconColor === item.color ? '2px solid #ffffff' : 'none',
+                                boxShadow: hotspotBeaconColor === item.color ? `0 0 10px ${item.color}` : 'none',
+                                cursor: 'pointer'
+                              }}
+                              title={item.label}
+                            />
                           ))}
                         </div>
                       </div>

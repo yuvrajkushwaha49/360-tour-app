@@ -308,23 +308,33 @@ export async function exportProjectToZip(
     }
     .room-btn:hover:not(.active) { background: rgba(255, 255, 255, 0.12); color: #fff; }
 
-    /* 3D Hotspot Screen Projection Elements */
+    /* 3D Hotspot Screen Projection Elements (Smart City Beacon) */
     .hotspot-wrapper {
       position: absolute; transform: translate(-50%, -100%); z-index: 50; cursor: pointer;
       display: flex; flex-direction: column; align-items: center; pointer-events: auto;
-      transition: transform 0.15s ease-out;
+      transition: transform 0.2s ease-out;
     }
     .hotspot-tag {
-      background: #13508a; border: 2px solid #ffffff; border-radius: 4px; padding: 6px 14px;
-      color: #ffffff; font-size: 11px; font-weight: 700; text-align: center; white-space: nowrap;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.6); display: flex; align-items: center; gap: 5px;
-      transition: all 0.2s ease;
+      background: rgba(11, 15, 25, 0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 14px; padding: 6px 12px;
+      color: #ffffff; font-size: 12px; font-weight: 700; text-align: left; white-space: nowrap;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.7), 0 0 15px rgba(99, 102, 241, 0.3);
+      display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;
     }
-    .hotspot-wrapper:hover .hotspot-tag { background: #1d6fc2; transform: scale(1.05); }
-    .hotspot-icon {
-      margin-top: 4px; display: flex; justify-content: center; color: #ffffff;
-      filter: drop-shadow(0px 2px 5px rgba(0,0,0,0.8));
+    .hotspot-wrapper:hover .hotspot-tag { transform: scale(1.05); border-color: #a855f7; box-shadow: 0 0 20px rgba(168, 85, 247, 0.5); }
+    .hotspot-beacon-line {
+      width: 2px; height: 32px; background: linear-gradient(to bottom, #a5b4fc, rgba(255, 255, 255, 0.8), transparent);
+      box-shadow: 0 0 8px #6366f1; position: relative;
     }
+    .hotspot-beacon-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 10px #818cf8;
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    }
+    .hotspot-ground-ring {
+      width: 24px; height: 12px; border-radius: 50%; background: rgba(99, 102, 241, 0.35);
+      border: 1.5px solid #a5b4fc; box-shadow: 0 0 12px #6366f1; display: flex; align-items: center; justify-content: center;
+    }
+    .hotspot-ground-core { width: 6px; height: 3px; border-radius: 50%; background: #fff; box-shadow: 0 0 6px #fff; }
 
     /* Hotspot Details Card (Hover Popup) */
     .hotspot-card {
@@ -727,21 +737,35 @@ export async function exportProjectToZip(
         const wrapper = document.createElement('div');
         wrapper.className = 'hotspot-wrapper';
 
-        const iconType = hs.icon || 'pin';
-        let iconSvg = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>';
-        if (iconType === 'arrow') {
-          iconSvg = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="16 12 12 8 8 12"></polyline><line x1="12" y1="16" x2="12" y2="8"></line></svg>';
-        } else if (iconType === 'info') {
-          iconSvg = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+        const bColor = hs.beaconColor || '#a855f7';
+        let iconHtml = '<div style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.08);border:1px solid ' + bColor + '88;display:flex;align-items:center;justify-content:center;color:' + bColor + ';flex-shrink:0;">';
+        if (hs.customIconUrl) {
+          iconHtml += '<img src="' + hs.customIconUrl + '" style="width:16px;height:16px;object-fit:contain;" />';
+        } else {
+          iconHtml += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>';
         }
+        iconHtml += '</div>';
 
         const tag = document.createElement('div');
         tag.className = 'hotspot-tag';
-        tag.innerHTML = (hs.isPublic === false ? '🔒 ' : '') + hs.name;
+        tag.style.borderColor = bColor + '66';
+        tag.style.boxShadow = '0 8px 25px rgba(0,0,0,0.7), 0 0 15px ' + bColor + '44';
 
-        const iconDiv = document.createElement('div');
-        iconDiv.className = 'hotspot-icon';
-        iconDiv.innerHTML = iconSvg;
+        let contentHtml = iconHtml + '<div style="display:flex;flex-direction:column;">';
+        contentHtml += '<div style="font-weight:700;font-size:0.82rem;color:#fff;">' + (hs.isPublic === false ? '🔒 ' : '') + hs.name + '</div>';
+        if (hs.subtitle) {
+          contentHtml += '<div style="font-size:0.68rem;color:' + bColor + ';font-weight:500;">' + hs.subtitle + '</div>';
+        }
+        contentHtml += '</div>';
+        tag.innerHTML = contentHtml;
+
+        const beaconLine = document.createElement('div');
+        beaconLine.className = 'hotspot-beacon-line';
+        beaconLine.innerHTML = '<div class="hotspot-beacon-dot"></div>';
+
+        const groundRing = document.createElement('div');
+        groundRing.className = 'hotspot-ground-ring';
+        groundRing.innerHTML = '<div class="hotspot-ground-core"></div>';
 
         // Hover Card
         const hasDetails = hs.area || hs.description || hs.targetLocationId;
@@ -749,17 +773,19 @@ export async function exportProjectToZip(
           const card = document.createElement('div');
           card.className = 'hotspot-card';
           let html = '<div class="hotspot-card-title">' + hs.name + '</div>';
+          if (hs.subtitle) html += '<div style="font-size:0.75rem;color:' + bColor + ';font-weight:600;margin-bottom:4px;">' + hs.subtitle + '</div>';
           if (hs.area) html += '<div class="hotspot-card-area">📐 Area: ' + hs.area + '</div>';
           if (hs.description) html += '<div class="hotspot-card-desc">' + hs.description + '</div>';
           if (hs.targetLocationId) {
-            html += '<button class="hotspot-card-btn">Explore Room ➔</button>';
+            html += '<button class="hotspot-card-btn">Explore Location ➔</button>';
           }
           card.innerHTML = html;
           wrapper.appendChild(card);
         }
 
         wrapper.appendChild(tag);
-        wrapper.appendChild(iconDiv);
+        wrapper.appendChild(beaconLine);
+        wrapper.appendChild(groundRing);
 
         wrapper.onclick = () => {
           if (hs.targetLocationId) {

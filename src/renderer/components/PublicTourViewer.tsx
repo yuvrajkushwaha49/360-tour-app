@@ -1,7 +1,37 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Globe, Share2, Copy, Check, ShieldAlert, Compass, Layers, Lock, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  ArrowLeft,
+  Globe,
+  Share2,
+  Check,
+  ShieldAlert,
+  Compass,
+  Layers,
+  Lock,
+  ShieldCheck,
+  Maximize2,
+  Minimize2,
+  Menu,
+  X,
+  Sun,
+  Sunset,
+  Moon,
+  Building2,
+  Map,
+  Network,
+  Image,
+  FileText,
+  Star,
+  ChevronLeft,
+  ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  Target
+} from 'lucide-react';
 import Viewer360 from './Viewer360';
-import { API_BASE_URL } from '../utils/apiConfig';
+import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
+import { ImageAdjustments, DEFAULT_ADJUSTMENTS } from '../utils/imageAdjustmentEngine';
 
 interface PublicTourViewerProps {
   tourId: string;
@@ -19,6 +49,14 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [error, setError] = useState<string | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+
+  // Smart City Portal UI States
+  const [activeNavTab, setActiveNavTab] = useState<string>('overview');
+  const [timeOfDay, setTimeOfDay] = useState<'day' | 'sunset' | 'night'>('day');
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [autoRotate, setAutoRotate] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const carouselScrollRef = useRef<HTMLDivElement>(null);
 
   const handleLocationChange = (locId: string) => {
     setActiveLocationId(locId);
@@ -82,12 +120,27 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
+
+  const scrollCarousel = (direction: 'left' | 'right') => {
+    if (carouselScrollRef.current) {
+      const scrollAmount = direction === 'left' ? -260 : 260;
+      carouselScrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
+
   if (loading) {
     return (
       <div className="public-viewer-page d-flex flex-column align-items-center justify-content-center text-white">
         <div className="spinner-border text-primary mb-3" role="status" style={{ width: '3rem', height: '3rem' }}></div>
-        <h3 className="h5 font-weight-normal tracking-wide">Loading 360° Virtual Tour...</h3>
-        <p className="small text-secondary mt-1 mb-0">Preparing high-definition panorama projection</p>
+        <h3 className="h5 font-weight-normal tracking-wide">Loading 360° Smart City Virtual Tour...</h3>
+        <p className="small text-secondary mt-1 mb-0">Rendering high-definition panorama projection & 3D beacons</p>
       </div>
     );
   }
@@ -157,52 +210,245 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const locations = tourData.locations || [];
   const currentLocation = locations.find((l: any) => l.id === activeLocationId) || locations[0];
 
+  // Calculate dynamic adjustments based on Time-of-Day mode
+  const baseAdjustments: ImageAdjustments = currentLocation?.adjustments || DEFAULT_ADJUSTMENTS;
+  let dynamicAdjustments: ImageAdjustments = { ...baseAdjustments };
+
+  if (timeOfDay === 'sunset') {
+    dynamicAdjustments = {
+      ...dynamicAdjustments,
+      exposure: (dynamicAdjustments.exposure || 0) + 8,
+      temperature: (dynamicAdjustments.temperature || 0) + 25,
+      saturation: (dynamicAdjustments.saturation || 0) + 18,
+      tint: (dynamicAdjustments.tint || 0) + 10
+    };
+  } else if (timeOfDay === 'night') {
+    dynamicAdjustments = {
+      ...dynamicAdjustments,
+      exposure: (dynamicAdjustments.exposure || 0) - 28,
+      contrast: (dynamicAdjustments.contrast || 0) + 22,
+      temperature: (dynamicAdjustments.temperature || 0) - 20,
+      vignette: Math.max(dynamicAdjustments.vignette || 0, 35)
+    };
+  }
+
   return (
     <div className="public-viewer-page">
-      {/* Floating Header */}
-      <div className="public-viewer-header">
-        <div className="d-flex align-items-center gap-3">
+      {/* Top Glassmorphic Navigation Bar */}
+      <div className="smart-portal-header">
+        {/* Left Branding Logo */}
+        <div className="smart-portal-brand">
           <button
-            onClick={onBack}
-            className="btn btn-sm btn-outline-secondary text-white rounded-3 px-3 d-flex align-items-center gap-1 shadow-sm"
-            title="Go Back"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="smart-tool-btn"
+            style={{ width: '2.25rem', height: '2.25rem' }}
+            title={sidebarOpen ? 'Hide Menu' : 'Show Menu'}
           >
-            <ArrowLeft className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="small font-weight-normal">Back</span>
+            {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
           </button>
-          <div>
-            <div className="public-viewer-title">
-              <span>{tourName}</span>
-              <span className="badge bg-primary bg-opacity-20 text-primary border border-primary border-opacity-30 rounded-pill px-2.5 py-1 small font-weight-normal">
-                360° Interactive VR
-              </span>
-            </div>
-            <p className="public-viewer-subtitle">
-              Location: <span className="text-white">{currentLocation?.name || 'Main Room'}</span>
-            </p>
+
+          <div className="smart-portal-logo">
+            <span>{tourName || 'DHOLERA'}</span>
+            <span className="smart-portal-tagline">360° MEGA PROJECT VR PORTAL</span>
           </div>
         </div>
 
-        {/* Share Button */}
-        <button
-          onClick={copyShareLink}
-          className="btn btn-sm btn-primary rounded-3 px-3.5 py-2 font-weight-normal d-flex align-items-center gap-2 shadow-sm"
-        >
-          {copied ? (
-            <>
-              <Check size={14} />
-              <span>Link Copied!</span>
-            </>
-          ) : (
-            <>
-              <Share2 size={14} />
-              <span>Share Tour</span>
-            </>
-          )}
-        </button>
+        {/* Center Category Nav Pills */}
+        <div className="smart-nav-pills">
+          <button
+            onClick={() => setActiveNavTab('overview')}
+            className={`smart-nav-btn ${activeNavTab === 'overview' ? 'active' : ''}`}
+          >
+            <Compass size={14} />
+            <span>Overview</span>
+          </button>
+          <button
+            onClick={() => setActiveNavTab('masterplan')}
+            className={`smart-nav-btn ${activeNavTab === 'masterplan' ? 'active' : ''}`}
+          >
+            <Map size={14} />
+            <span>Master Plan</span>
+          </button>
+          <button
+            onClick={() => setActiveNavTab('infrastructure')}
+            className={`smart-nav-btn ${activeNavTab === 'infrastructure' ? 'active' : ''}`}
+          >
+            <Building2 size={14} />
+            <span>Infrastructure</span>
+          </button>
+          <button
+            onClick={() => setActiveNavTab('connectivity')}
+            className={`smart-nav-btn ${activeNavTab === 'connectivity' ? 'active' : ''}`}
+          >
+            <Network size={14} />
+            <span>Connectivity</span>
+          </button>
+          <button
+            onClick={() => setActiveNavTab('gallery')}
+            className={`smart-nav-btn ${activeNavTab === 'gallery' ? 'active' : ''}`}
+          >
+            <Image size={14} />
+            <span>Gallery</span>
+          </button>
+        </div>
+
+        {/* Right Controls (Time-of-Day, Share, Fullscreen, Back) */}
+        <div className="smart-top-right">
+          {/* Time of Day Toggle */}
+          <div className="smart-tod-toggle">
+            <button
+              onClick={() => setTimeOfDay('day')}
+              className={`smart-tod-btn ${timeOfDay === 'day' ? 'active' : ''}`}
+              title="Day Mode"
+            >
+              <Sun size={13} />
+              <span>Day</span>
+            </button>
+            <button
+              onClick={() => setTimeOfDay('sunset')}
+              className={`smart-tod-btn ${timeOfDay === 'sunset' ? 'active-sunset' : ''}`}
+              title="Sunset / Golden Hour Mode"
+            >
+              <Sunset size={13} />
+              <span>Sunset</span>
+            </button>
+            <button
+              onClick={() => setTimeOfDay('night')}
+              className={`smart-tod-btn ${timeOfDay === 'night' ? 'active-night' : ''}`}
+              title="Night / Cyber Mode"
+            >
+              <Moon size={13} />
+              <span>Night</span>
+            </button>
+          </div>
+
+          {/* Share Button */}
+          <button
+            onClick={copyShareLink}
+            className="smart-tool-btn"
+            style={{ width: '2.25rem', height: '2.25rem' }}
+            title="Share Tour Link"
+          >
+            {copied ? <Check size={16} className="text-emerald-400" /> : <Share2 size={16} />}
+          </button>
+
+          {/* Fullscreen Toggle */}
+          <button
+            onClick={toggleFullscreen}
+            className="smart-tool-btn"
+            style={{ width: '2.25rem', height: '2.25rem' }}
+            title="Toggle Fullscreen"
+          >
+            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
+
+          {/* Back to Dashboard */}
+          <button
+            onClick={onBack}
+            className="smart-tool-btn"
+            style={{ width: '2.25rem', height: '2.25rem', color: '#a5b4fc' }}
+            title="Back to Dashboard"
+          >
+            <ArrowLeft size={16} />
+          </button>
+        </div>
       </div>
 
-      {/* 360 Canvas View */}
+      {/* Left Collapsible Glassmorphic Sidebar */}
+      <div className={`smart-portal-sidebar ${sidebarOpen ? 'open' : 'collapsed'}`}>
+        <div className="smart-sidebar-title">
+          EXPLORE {tourName ? tourName.toUpperCase() : 'MEGA REGION'}
+        </div>
+
+        {/* 360 Aerial View CTA Card */}
+        <div
+          className="smart-cta-card"
+          onClick={() => {
+            if (locations.length > 0) handleLocationChange(locations[0].id);
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Globe size={22} className="text-indigo-400" />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#ffffff' }}>360° AERIAL VIEW</div>
+              <div style={{ fontSize: '0.7rem', color: '#cbd5e1' }}>Explore in 360° VR</div>
+            </div>
+          </div>
+          <ChevronRight size={18} className="text-indigo-400" />
+        </div>
+
+        {/* Sidebar Feature Links */}
+        <div className="smart-sidebar-menu">
+          <div className="smart-menu-item" onClick={() => setActiveNavTab('masterplan')}>
+            <div className="smart-menu-icon"><Map size={16} /></div>
+            <div>
+              <div className="smart-menu-label">MASTER PLAN</div>
+              <div className="smart-menu-sub">View smart city planning</div>
+            </div>
+          </div>
+
+          <div className="smart-menu-item" onClick={() => setActiveNavTab('infrastructure')}>
+            <div className="smart-menu-icon"><Building2 size={16} /></div>
+            <div>
+              <div className="smart-menu-label">INFRASTRUCTURE</div>
+              <div className="smart-menu-sub">World class infrastructure</div>
+            </div>
+          </div>
+
+          <div className="smart-menu-item" onClick={() => setActiveNavTab('connectivity')}>
+            <div className="smart-menu-icon"><Network size={16} /></div>
+            <div>
+              <div className="smart-menu-label">CONNECTIVITY</div>
+              <div className="smart-menu-sub">Road • Rail • Air • Sea</div>
+            </div>
+          </div>
+
+          <div className="smart-menu-item" onClick={() => setActiveNavTab('gallery')}>
+            <div className="smart-menu-icon"><Image size={16} /></div>
+            <div>
+              <div className="smart-menu-label">GALLERY</div>
+              <div className="smart-menu-sub">Photos & videos</div>
+            </div>
+          </div>
+
+          <div className="smart-menu-item" onClick={copyShareLink}>
+            <div className="smart-menu-icon"><FileText size={16} /></div>
+            <div>
+              <div className="smart-menu-label">DOWNLOADS</div>
+              <div className="smart-menu-sub">Brochures & documents</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Zone Legend */}
+        <div className="smart-legend-box">
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#f59e0b', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            ZONE LEGEND
+          </div>
+          <div className="smart-legend-item">
+            <span className="smart-legend-dot" style={{ background: '#a855f7', color: '#a855f7' }} />
+            <span>Industrial Zone</span>
+          </div>
+          <div className="smart-legend-item">
+            <span className="smart-legend-dot" style={{ background: '#eab308', color: '#eab308' }} />
+            <span>Residential Zone</span>
+          </div>
+          <div className="smart-legend-item">
+            <span className="smart-legend-dot" style={{ background: '#3b82f6', color: '#3b82f6' }} />
+            <span>Commercial Zone</span>
+          </div>
+          <div className="smart-legend-item">
+            <span className="smart-legend-dot" style={{ background: '#f97316', color: '#f97316' }} />
+            <span>High Access Corridor</span>
+          </div>
+          <div className="smart-legend-item">
+            <span className="smart-legend-dot" style={{ background: '#10b981', color: '#10b981' }} />
+            <span>Green & Recreation</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 360 Canvas View with 3D Beacons */}
       <div className="public-viewer-canvas">
         <Viewer360
           readOnly={true}
@@ -210,28 +456,130 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           gridConfigs={currentLocation?.gridConfigs || {}}
           hotspots={currentLocation?.hotspots || []}
           stitchedPanoPath={currentLocation?.stitchedPanoPath || currentLocation?.imagePath}
-          adjustments={currentLocation?.adjustments}
+          adjustments={dynamicAdjustments}
+          autoRotate={autoRotate}
           onNavigate={(targetId) => {
             const targetLoc = locations.find((l: any) => l.id === targetId);
             if (targetLoc) handleLocationChange(targetLoc.id);
           }}
         />
+      </div>
 
-        {/* Floating Bottom Room Selector Carousel */}
-        {locations.length > 1 && (
-          <div className="public-viewer-room-bar">
-            {locations.map((loc: any) => (
-              <button
-                key={loc.id}
-                onClick={() => handleLocationChange(loc.id)}
-                className={`room-tab-btn ${loc.id === activeLocationId ? 'active' : 'inactive'}`}
-              >
-                <Layers size={14} />
-                <span>{loc.name}</span>
-              </button>
-            ))}
+      {/* Bottom Floating Quick Explore Carousel */}
+      {locations.length > 0 && (
+        <div className="smart-bottom-carousel-wrapper">
+          <div className="smart-carousel-title">
+            QUICK EXPLORE
           </div>
-        )}
+
+          <div className="smart-carousel-container">
+            {locations.length > 4 && (
+              <button onClick={() => scrollCarousel('left')} className="smart-carousel-arrow" title="Previous">
+                <ChevronLeft size={18} />
+              </button>
+            )}
+
+            <div className="smart-carousel-scroll" ref={carouselScrollRef}>
+              {locations.map((loc: any, idx: number) => {
+                const isActive = loc.id === activeLocationId;
+                const paddedNum = String(idx + 1).padStart(2, '0');
+
+                // Determine thumbnail image
+                let thumbSrc = '';
+                if (loc.stitchedPanoPath) {
+                  thumbSrc = loc.stitchedPanoPath.startsWith('http') || loc.stitchedPanoPath.startsWith('data:')
+                    ? toCloudFrontUrl(loc.stitchedPanoPath)
+                    : `${API_BASE_URL}${loc.stitchedPanoPath.startsWith('/') ? '' : '/'}${loc.stitchedPanoPath}`;
+                } else if (loc.directions?.F?.[0]?.path) {
+                  const p = loc.directions.F[0].path;
+                  thumbSrc = p.startsWith('http') || p.startsWith('data:')
+                    ? toCloudFrontUrl(p)
+                    : `${API_BASE_URL}${p.startsWith('/') ? '' : '/'}${p}`;
+                }
+
+                return (
+                  <div
+                    key={loc.id}
+                    onClick={() => handleLocationChange(loc.id)}
+                    className={`smart-thumb-card ${isActive ? 'active' : ''}`}
+                    title={loc.name}
+                  >
+                    {thumbSrc ? (
+                      <img src={thumbSrc} alt={loc.name} className="smart-thumb-img" />
+                    ) : (
+                      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #1e1b4b, #0f172a)' }} />
+                    )}
+
+                    <div className="smart-thumb-overlay">
+                      <span className="smart-thumb-num">{paddedNum}</span>
+                      <span className="smart-thumb-name">{loc.name}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {locations.length > 4 && (
+              <button onClick={() => scrollCarousel('right')} className="smart-carousel-arrow" title="Next">
+                <ChevronRight size={18} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Bottom Center Floating Toolbar */}
+      <div className="smart-bottom-toolbar">
+        <button
+          className={`smart-tool-btn ${autoRotate ? 'active-360' : ''}`}
+          onClick={() => setAutoRotate(!autoRotate)}
+          title="Toggle 360° Auto-Rotation"
+        >
+          <RotateCw size={16} />
+        </button>
+
+        <button
+          className="smart-tool-btn"
+          onClick={() => {
+            const canvasEl = document.getElementById('viewer-canvas-container');
+            if (canvasEl) {
+              const resetBtn = canvasEl.querySelector('button[title*="Reset"], button[title*="Center"]');
+              if (resetBtn) (resetBtn as HTMLElement).click();
+            }
+          }}
+          title="Reset View"
+        >
+          <Target size={16} />
+        </button>
+
+        <button
+          className="smart-tool-btn"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          title="Toggle Zone & Master Plan"
+        >
+          <Map size={16} />
+        </button>
+      </div>
+
+      {/* Bottom Right Realistic 3D Compass */}
+      <div className="smart-compass-widget">
+        <div
+          className="smart-compass-dial"
+          onClick={() => {
+            const canvasEl = document.getElementById('viewer-canvas-container');
+            if (canvasEl) {
+              const compassEl = canvasEl.querySelector('div[style*="rotate"]');
+              if (compassEl) (compassEl as HTMLElement).click();
+            }
+          }}
+          title="Orientation Compass (Click to reset North)"
+        >
+          <div className="smart-compass-needle">
+            <div className="smart-needle-north" />
+            <div className="smart-needle-south" />
+          </div>
+          <span className="smart-compass-n">N</span>
+        </div>
       </div>
     </div>
   );

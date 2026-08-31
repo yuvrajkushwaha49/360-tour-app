@@ -3,7 +3,32 @@ import React, { useRef, useState, useCallback } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
-import { RotateCw, ZoomIn, ZoomOut, Maximize2, Compass, Play, Pause, PlusCircle, XCircle, CheckCircle, MapPin, ArrowUpCircle, Info, Sliders } from 'lucide-react';
+import {
+  RotateCw,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Compass,
+  Play,
+  Pause,
+  PlusCircle,
+  XCircle,
+  CheckCircle,
+  MapPin,
+  ArrowUpCircle,
+  Info,
+  Sliders,
+  Building2,
+  Plane,
+  Zap,
+  Droplets,
+  Cpu,
+  Utensils,
+  Waves,
+  Trees,
+  Navigation2,
+  ChevronRight
+} from 'lucide-react';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
 
 interface ProjectImage {
@@ -11,19 +36,88 @@ interface ProjectImage {
   path: string;
 }
 
-interface HotspotItem {
+export interface HotspotItem {
   id: string;
   targetLocationId?: string;
   name: string;
+  subtitle?: string; // e.g. "5 km" or "101 km"
+  category?: string; // e.g. "Industrial" | "Residential" | "Commercial" | "Infrastructure" | "Connectivity"
   area?: string;
   description?: string;
   position: [number, number, number];
   polygonPoints?: [number, number, number][];
-  icon?: 'arrow' | 'pin' | 'info';
+  icon?: string;
+  customIconUrl?: string; // Uploaded custom PNG/SVG URL
+  beaconColor?: string; // e.g. '#6366f1' | '#a855f7' | '#06b6d4' | '#10b981' | '#f59e0b'
+  areaType?: 'building' | 'river' | 'road';
   isPublic?: boolean;
   assignedUserId?: string;
   assignedUserName?: string;
 }
+
+// Helper to render custom uploaded icon or matching category preset icon
+export const renderHotspotIcon = (icon?: string, customIconUrl?: string, size = 18) => {
+  if (customIconUrl) {
+    const fullUrl = customIconUrl.startsWith('http') || customIconUrl.startsWith('data:')
+      ? toCloudFrontUrl(customIconUrl)
+      : `${API_BASE_URL}${customIconUrl.startsWith('/') ? '' : '/'}${customIconUrl}`;
+    return (
+      <img
+        src={fullUrl}
+        alt="icon"
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          objectFit: 'contain',
+          display: 'block'
+        }}
+        onError={(e) => {
+          (e.currentTarget as HTMLElement).style.display = 'none';
+        }}
+      />
+    );
+  }
+
+  switch (icon) {
+    case 'building':
+    case 'commercial':
+      return <Building2 size={size} />;
+    case 'airport':
+    case 'flight':
+      return <Plane size={size} />;
+    case 'energy':
+    case 'power':
+      return <Zap size={size} />;
+    case 'water':
+    case 'reservoir':
+      return <Droplets size={size} />;
+    case 'factory':
+    case 'chip':
+    case 'semiconductor':
+    case 'industrial':
+      return <Cpu size={size} />;
+    case 'food':
+    case 'dining':
+      return <Utensils size={size} />;
+    case 'canal':
+    case 'waterfront':
+    case 'river':
+      return <Waves size={size} />;
+    case 'nature':
+    case 'green':
+    case 'park':
+      return <Trees size={size} />;
+    case 'road':
+      return <Navigation2 size={size} />;
+    case 'arrow':
+      return <ArrowUpCircle size={size} style={{ transform: 'rotate(180deg)' }} />;
+    case 'info':
+      return <Info size={size} />;
+    case 'pin':
+    default:
+      return <MapPin size={size} />;
+  }
+};
 
 
 interface AdjustedMaterialProps {
@@ -891,8 +985,8 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                         </div>
                       )}
 
-                      {/* 1. The Top Text Card (Button) */}
-                      <button
+                      {/* 1. Smart City Futuristic Glassmorphic Hotspot Card (Reference Design) */}
+                      <div
                         onClick={(e) => {
                           e.stopPropagation();
                           if (h.targetLocationId) onNavigate(h.targetLocationId, h.position);
@@ -903,40 +997,129 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                           setContextMenuId(contextMenuId === h.id ? null : h.id);
                         }}
                         style={{
-                          background: '#13508a',
-                          border: '2px solid white',
-                          borderRadius: '4px',
-                          padding: '8px 16px',
-                          color: 'white',
-                          fontSize: '12px',
-                          fontWeight: 'bold',
-                          textAlign: 'center',
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap',
-                          boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
+                          background: 'rgba(11, 15, 25, 0.88)',
+                          backdropFilter: 'blur(16px)',
+                          WebkitBackdropFilter: 'blur(16px)',
+                          border: `1px solid ${h.beaconColor ? `${h.beaconColor}66` : 'rgba(255, 255, 255, 0.2)'}`,
+                          boxShadow: `0 8px 32px rgba(0, 0, 0, 0.75), 0 0 20px ${h.beaconColor ? `${h.beaconColor}44` : 'rgba(99, 102, 241, 0.25)'}`,
+                          borderRadius: '16px',
+                          padding: '8px 14px',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '6px',
-                          fontFamily: 'inherit',
-                          outline: 'none'
+                          gap: '10px',
+                          color: '#ffffff',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                          userSelect: 'none',
+                          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                          transform: isOpen ? 'scale(1.06)' : 'scale(1)',
+                          position: 'relative'
                         }}
+                        className="smart-hotspot-pill"
                         title="Left-click to Navigate. Right-click for options."
                       >
-                        {h.isPublic === false ? '🔒 ' : ''}{h.name}
-                      </button>
+                        {/* Icon Badge */}
+                        <div
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '10px',
+                            background: h.beaconColor ? `linear-gradient(135deg, ${h.beaconColor}33, ${h.beaconColor}11)` : 'rgba(255, 255, 255, 0.08)',
+                            border: `1px solid ${h.beaconColor ? `${h.beaconColor}88` : 'rgba(255, 255, 255, 0.15)'}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: h.beaconColor || '#a5b4fc',
+                            flexShrink: 0,
+                            boxShadow: `0 0 12px ${h.beaconColor ? `${h.beaconColor}44` : 'rgba(99, 102, 241, 0.3)'}`
+                          }}
+                        >
+                          {renderHotspotIcon(h.icon, h.customIconUrl, 18)}
+                        </div>
 
-                      {/* 2. Standard Pin Icon */}
-                      <div style={{
-                        marginTop: '4px',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        color: 'white',
-                        filter: 'drop-shadow(0px 2px 5px rgba(0,0,0,0.6))'
-                      }}>
-                        {(h.icon === 'pin' || !h.icon) && <MapPin size={32} strokeWidth={2.5} />}
-                        {h.icon === 'arrow' && <ArrowUpCircle size={32} strokeWidth={2.5} style={{ transform: 'rotate(180deg)' }} />}
-                        {h.icon === 'info' && <Info size={32} strokeWidth={2.5} />}
+                        {/* Label Text + Subtitle / Distance */}
+                        <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
+                          <div style={{
+                            fontWeight: 700,
+                            fontSize: '0.85rem',
+                            letterSpacing: '0.02em',
+                            color: '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
+                          }}>
+                            {h.isPublic === false && <span style={{ fontSize: '0.75rem' }}>🔒</span>}
+                            <span>{h.name}</span>
+                            {h.targetLocationId && (
+                              <ChevronRight size={12} style={{ color: h.beaconColor || '#a5b4fc', opacity: 0.8 }} />
+                            )}
+                          </div>
+
+                          {h.subtitle && (
+                            <div style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 500,
+                              color: h.beaconColor ? h.beaconColor : '#94a3b8',
+                              marginTop: '1px',
+                              opacity: 0.95
+                            }}>
+                              {h.subtitle}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 2. Vertical Glowing Laser Pin extending down */}
+                      <div
+                        style={{
+                          width: '2px',
+                          height: '36px',
+                          background: `linear-gradient(to bottom, ${h.beaconColor || '#a5b4fc'}, rgba(255, 255, 255, 0.8), transparent)`,
+                          boxShadow: `0 0 10px ${h.beaconColor || '#6366f1'}`,
+                          position: 'relative'
+                        }}
+                      >
+                        {/* Center glowing bead */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: '#ffffff',
+                            boxShadow: `0 0 12px 3px ${h.beaconColor || '#818cf8'}`
+                          }}
+                        />
+                      </div>
+
+                      {/* 3. Concentric Pulsing Ground Beacon Ring on Terrain */}
+                      <div
+                        style={{
+                          position: 'relative',
+                          width: '28px',
+                          height: '14px',
+                          borderRadius: '50%',
+                          background: h.beaconColor ? `${h.beaconColor}44` : 'rgba(99, 102, 241, 0.35)',
+                          border: `1.5px solid ${h.beaconColor || '#a5b4fc'}`,
+                          boxShadow: `0 0 16px ${h.beaconColor || '#6366f1'}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        {/* Ground Pin Core Dot */}
+                        <div
+                          style={{
+                            width: '8px',
+                            height: '4px',
+                            borderRadius: '50%',
+                            background: '#ffffff',
+                            boxShadow: '0 0 8px #ffffff'
+                          }}
+                        />
                       </div>
                     </div>
                   </Html>
