@@ -220,7 +220,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       exposure: (dynamicAdjustments.exposure || 0) + 8,
       temperature: (dynamicAdjustments.temperature || 0) + 25,
       saturation: (dynamicAdjustments.saturation || 0) + 18,
-      tint: (dynamicAdjustments.tint || 0) + 10
+      hue: (dynamicAdjustments.hue || 0) + 4
     };
   } else if (timeOfDay === 'night') {
     dynamicAdjustments = {
@@ -458,6 +458,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           stitchedPanoPath={currentLocation?.stitchedPanoPath || currentLocation?.imagePath}
           adjustments={dynamicAdjustments}
           autoRotate={autoRotate}
+          onImageNotFound={onBack}
           onNavigate={(targetId) => {
             const targetLoc = locations.find((l: any) => l.id === targetId);
             if (targetLoc) handleLocationChange(targetLoc.id);

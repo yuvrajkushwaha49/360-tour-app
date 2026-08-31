@@ -589,14 +589,60 @@ async function deleteAssets(keys) {
   }
 }
 
+// Helper to check if any S3 key is used by other projects before deleting
+function filterUnusedKeys(keysToCheck, excludeProjectId, callback) {
+  if (!keysToCheck || keysToCheck.length === 0) {
+    return callback([]);
+  }
+
+  db.all(`SELECT id, data FROM projects WHERE id != ?`, [excludeProjectId || ''], (err, rows) => {
+    if (err || !rows) {
+      // In case of database error, play it safe: do not delete any asset from S3
+      console.warn('[Safe S3 Deletion] Database query error, skipping S3 purge to protect assets:', err?.message);
+      return callback([]);
+    }
+
+    const usedKeysInOtherProjects = new Set();
+    for (const r of rows) {
+      if (r.data) {
+        try {
+          const parsed = JSON.parse(r.data);
+          const otherKeys = extractS3KeysFromData(parsed);
+          otherKeys.forEach(k => usedKeysInOtherProjects.add(k));
+        } catch (e) {
+          // Fallback string matching for resilience
+          for (const k of keysToCheck) {
+            const baseName = path.basename(k);
+            if (r.data.includes(baseName)) {
+              usedKeysInOtherProjects.add(k);
+            }
+          }
+        }
+      }
+    }
+
+    // Only allow deletion of keys that are NOT used in any other project!
+    const safeToDelete = keysToCheck.filter(k => !usedKeysInOtherProjects.has(k));
+    const preservedCount = keysToCheck.length - safeToDelete.length;
+    if (preservedCount > 0) {
+      console.log(`[Safe S3 Asset Protection] 🛡️ Retained ${preservedCount} image(s) because they are actively used in other projects.`);
+    }
+    callback(safeToDelete);
+  });
+}
+
 // Bulk Asset Deletion Endpoint (Used when clearing faces or deleting rooms)
 app.post('/api/delete-assets', (req, res) => {
-  const { paths, keys } = req.body;
+  const { paths, keys, currentProjectId } = req.body;
   const targetKeys = keys || extractS3KeysFromData(paths);
   if (targetKeys && targetKeys.length > 0) {
-    deleteAssets(targetKeys);
+    filterUnusedKeys(targetKeys, currentProjectId, async (safeToDeleteKeys) => {
+      if (safeToDeleteKeys.length > 0) {
+        await deleteAssets(safeToDeleteKeys);
+      }
+    });
   }
-  res.json({ message: 'Assets deleted successfully', count: targetKeys ? targetKeys.length : 0 });
+  res.json({ message: 'Assets cleanup processed safely' });
 });
 
 // Delete project and automatically purge its S3 images & database records
@@ -613,12 +659,16 @@ app.delete('/api/projects/:id', authenticateToken, (req, res) => {
       return res.status(200).json({ message: 'Project already deleted or does not exist on server.' });
     }
 
-    // 1. Purge all S3 images & local uploads associated with this project
+    // 1. Purge ONLY S3 images & local uploads that are NOT used in any other project
     try {
       const projectData = JSON.parse(row.data);
       const keysToDelete = extractS3KeysFromData(projectData);
       if (keysToDelete.length > 0) {
-        await deleteAssets(keysToDelete);
+        filterUnusedKeys(keysToDelete, id, async (safeKeys) => {
+          if (safeKeys.length > 0) {
+            await deleteAssets(safeKeys);
+          }
+        });
       }
     } catch (parseErr) {
       console.warn('Could not parse project data for asset cleanup:', parseErr);

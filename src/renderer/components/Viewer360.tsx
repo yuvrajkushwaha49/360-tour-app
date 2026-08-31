@@ -1185,6 +1185,7 @@ interface Viewer360Props {
   areaType?: 'building' | 'river' | 'road';
   readOnly?: boolean;
   onOpenAdjustments?: () => void;
+  onImageNotFound?: () => void;
 }
 
 const CameraZoomEffect: React.FC<{ isZooming: boolean; targetPos: [number, number, number] | null; controlsRef: any }> = ({ isZooming, targetPos, controlsRef }) => {
@@ -1225,10 +1226,13 @@ export const Viewer360: React.FC<Viewer360Props> = ({
   onAddAreaOutline = () => { },
   areaType = 'building',
   readOnly = false,
-  onOpenAdjustments
+  onOpenAdjustments,
+  onImageNotFound
 }) => {
   const [autoRotate, setAutoRotate] = useState(false);
   const [heading, setHeading] = useState(0);
+  const [imageMissingError, setImageMissingError] = useState<boolean>(false);
+  const [countdown, setCountdown] = useState<number>(4);
   const [isZooming, setIsZooming] = useState(false);
   const [isBlurring, setIsBlurring] = useState(false);
   const [zoomTargetPos, setZoomTargetPos] = useState<[number, number, number] | null>(null);
@@ -1293,8 +1297,10 @@ export const Viewer360: React.FC<Viewer360Props> = ({
     }
 
     setIsPreloading(true);
+    setImageMissingError(false);
 
     let loadedCount = 0;
+    let failedCount = 0;
     const totalCount = allImageUrls.length;
     const loader = new THREE.TextureLoader();
 
@@ -1314,8 +1320,14 @@ export const Viewer360: React.FC<Viewer360Props> = ({
         undefined,
         () => {
           if (!isMounted) return;
+          failedCount++;
           loadedCount++;
-          if (loadedCount >= totalCount) {
+          if (failedCount >= totalCount && totalCount > 0) {
+            if (isMounted) {
+              setIsPreloading(false);
+              setImageMissingError(true);
+            }
+          } else if (loadedCount >= totalCount) {
             if (isMounted) {
               setIsPreloading(false);
               setHasLoadedOnce(true);
@@ -1327,6 +1339,23 @@ export const Viewer360: React.FC<Viewer360Props> = ({
 
     return () => { isMounted = false; };
   }, [allImageUrls, hasLoadedOnce]);
+
+  // Auto redirect to Home countdown if images are missing from S3
+  React.useEffect(() => {
+    if (!imageMissingError) return;
+    const timer = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          if (onImageNotFound) onImageNotFound();
+          else window.location.href = '/';
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [imageMissingError, onImageNotFound]);
 
   React.useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
@@ -1410,8 +1439,70 @@ export const Viewer360: React.FC<Viewer360Props> = ({
           }`}
       />
 
+      {/* S3 Missing Image Fallback Error Overlay */}
+      {imageMissingError && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 1000,
+          background: 'rgba(7, 8, 15, 0.95)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          textAlign: 'center',
+          color: '#ffffff'
+        }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '50%',
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '16px',
+            fontSize: '28px'
+          }}>
+            ⚠️
+          </div>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '8px' }}>
+            360 Image Not Found on Cloud Storage (S3)
+          </h3>
+          <p style={{ color: '#94a3b8', fontSize: '0.88rem', maxWidth: '420px', marginBottom: '24px', lineHeight: 1.5 }}>
+            The 360 panorama assets for this location could not be found on AWS S3. Returning to Home Page in <strong style={{ color: '#a5b4fc' }}>{countdown}s</strong>...
+          </p>
+          <button
+            onClick={() => {
+              if (onImageNotFound) onImageNotFound();
+              else window.location.href = '/';
+            }}
+            style={{
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              border: 'none',
+              color: '#ffffff',
+              fontWeight: 700,
+              fontSize: '0.88rem',
+              padding: '10px 24px',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              boxShadow: '0 8px 20px rgba(99, 102, 241, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <span>🏠 Return to Home Page Now</span>
+          </button>
+        </div>
+      )}
+
       {/* Loading Spinners */}
-      {isPreloading && (
+      {isPreloading && !imageMissingError && (
         <div className="absolute inset-0 z-50 bg-[#07080f]/90 backdrop-blur-md flex items-center justify-center pointer-events-none transition-opacity duration-300">
           <div className="w-10 h-10 border-3 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
         </div>
