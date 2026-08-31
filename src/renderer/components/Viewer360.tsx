@@ -1153,12 +1153,22 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
         </>
       )}
 
-      {/* Render temporary vertex markers as small spheres */}
+      {/* Render temporary vertex markers as crisp constant-size 2D dots */}
       {drawingPoints.map((pt, idx) => (
-        <mesh key={idx} position={pt}>
-          <sphereGeometry args={[10, 8, 8]} />
-          <meshBasicMaterial color="#a855f7" />
-        </mesh>
+        <Html key={idx} position={pt} center style={{ pointerEvents: 'none' }}>
+          <div
+            style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: areaType === 'road' ? '#fbbf24' : areaType === 'river' ? '#3b82f6' : '#a855f7',
+              border: '2px solid #ffffff',
+              boxShadow: '0 0 6px rgba(0,0,0,0.8), 0 0 4px #ffffff',
+              transform: 'translate(-50%, -50%)',
+              pointerEvents: 'none'
+            }}
+          />
+        </Html>
       ))}
     </group>
   );
