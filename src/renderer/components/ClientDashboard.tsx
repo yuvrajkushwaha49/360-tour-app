@@ -895,53 +895,55 @@ export default function ClientDashboard({
                             )}
                           </div>
 
-                          <div className="pt-3 border-top border-secondary border-opacity-25 d-flex align-items-center justify-content-between gap-2 mt-3">
-                            <div className="d-flex align-items-center gap-2">
-                              <button
-                                onClick={() => onLaunchPublicView(project.id)}
-                                className="btn btn-sm btn-primary rounded-3 px-3 d-flex align-items-center gap-1 font-weight-normal"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>View 360°</span>
-                              </button>
+                          {user.role === 'admin' && (
+                            <div className="pt-3 border-top border-secondary border-opacity-25 d-flex align-items-center justify-content-between gap-2 mt-3">
+                              <div className="d-flex align-items-center gap-2">
+                                <button
+                                  onClick={() => onLaunchPublicView(project.id)}
+                                  className="btn btn-sm btn-primary rounded-3 px-3 d-flex align-items-center gap-1 font-weight-normal"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>View 360°</span>
+                                </button>
+
+                                {user.role === 'admin' && (
+                                  <button
+                                    onClick={() => onOpenProject(project)}
+                                    className="btn btn-sm btn-outline-secondary text-white rounded-3 px-3 d-flex align-items-center gap-1"
+                                  >
+                                    <Compass className="w-3.5 h-3.5 text-info" />
+                                    <span>Edit in Studio</span>
+                                  </button>
+                                )}
+
+                                <button
+                                  onClick={() => copyShareLink(project.id)}
+                                  className="btn btn-sm btn-outline-secondary p-2 rounded-3"
+                                  title="Copy Share Link"
+                                >
+                                  <Share2 className="w-3.5 h-3.5" />
+                                </button>
+
+                                <button
+                                  onClick={() => handleExportZip(project)}
+                                  className="btn btn-sm btn-outline-success p-2 rounded-3"
+                                  title="Export Standalone Web Package (.ZIP)"
+                                >
+                                  <Archive className="w-3.5 h-3.5 text-success" />
+                                </button>
+                              </div>
 
                               {user.role === 'admin' && (
                                 <button
-                                  onClick={() => onOpenProject(project)}
-                                  className="btn btn-sm btn-outline-secondary text-white rounded-3 px-3 d-flex align-items-center gap-1"
+                                  onClick={() => deleteProject(project.id)}
+                                  className="btn btn-sm btn-outline-danger p-2 rounded-3"
+                                  title="Delete Project"
                                 >
-                                  <Compass className="w-3.5 h-3.5 text-info" />
-                                  <span>Edit in Studio</span>
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               )}
-
-                              <button
-                                onClick={() => copyShareLink(project.id)}
-                                className="btn btn-sm btn-outline-secondary p-2 rounded-3"
-                                title="Copy Share Link"
-                              >
-                                <Share2 className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                onClick={() => handleExportZip(project)}
-                                className="btn btn-sm btn-outline-success p-2 rounded-3"
-                                title="Export Standalone Web Package (.ZIP)"
-                              >
-                                <Archive className="w-3.5 h-3.5 text-success" />
-                              </button>
                             </div>
-
-                            {user.role === 'admin' && (
-                              <button
-                                onClick={() => deleteProject(project.id)}
-                                className="btn btn-sm btn-outline-danger p-2 rounded-3"
-                                title="Delete Project"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
+                          )}
                         </div>
                       </div>
                     </div>
