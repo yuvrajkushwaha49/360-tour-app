@@ -777,8 +777,8 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
         </React.Suspense>
       ))}
 
-      {/* Render 3D saved hotspots and area lines ONLY when isPreloading === false */}
-      {!isPreloading && safeHotspots
+      {/* Render 3D saved hotspots and area lines ONLY when isPreloading === false and NOT drawing area outline */}
+      {!isPreloading && !isDrawingArea && safeHotspots
         .filter(h => {
           if (h.isPublic === false) {
             try {
@@ -814,7 +814,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
             overlayOpacity = 0.25;
           }
 
-          const shouldShowOutline = isOpen || isDrawingArea;
+          const shouldShowOutline = isOpen;
 
           return (
             <React.Fragment key={h.id}>
@@ -1400,6 +1400,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
   };
 
   const [isPreloading, setIsPreloading] = useState<boolean>(true);
+  const [hasLoadedInitialTour, setHasLoadedInitialTour] = useState<boolean>(false);
   const [loadProgress, setLoadProgress] = useState<number>(0);
 
   // Extract all texture URLs to preload before showing 360 viewer
@@ -1432,7 +1433,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
 
   React.useEffect(() => {
     let isMounted = true;
-    if (allImageUrls.length === 0) {
+    if (allImageUrls.length === 0 || hasLoadedInitialTour) {
       setIsPreloading(false);
       setLoadProgress(100);
       return;
@@ -1459,6 +1460,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
             setTimeout(() => {
               if (isMounted) {
                 setIsPreloading(false);
+                setHasLoadedInitialTour(true);
               }
             }, 250);
           }
@@ -1479,6 +1481,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
             setTimeout(() => {
               if (isMounted) {
                 setIsPreloading(false);
+                setHasLoadedInitialTour(true);
               }
             }, 250);
           }
@@ -1487,7 +1490,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
     });
 
     return () => { isMounted = false; };
-  }, [allImageUrls]);
+  }, [allImageUrls, hasLoadedInitialTour]);
 
   // Auto redirect to Home countdown if images are missing from S3
   React.useEffect(() => {

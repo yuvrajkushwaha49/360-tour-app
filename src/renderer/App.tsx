@@ -704,17 +704,82 @@ export default function App() {
     setShowLocationModal(false);
   };
 
+  const populateFromExistingRoom = (chosenId: string) => {
+    setSelectedTargetId(chosenId);
+    if (!chosenId) return;
+
+    const loc = locations.find(l => l.id === chosenId);
+    if (!loc) return;
+
+    // Check if there is an existing hotspot in any room that links TO this target room
+    const existingInboundHotspot = locations
+      .flatMap(l => l.hotspots || [])
+      .find(h => h.targetLocationId === chosenId);
+
+    // 1. Hotspot / Location Title * (Selected Room's Name)
+    setNewLinkRoomName(loc.name || '');
+
+    // 2. Distance / Subtitle Badge (e.g. 5 km, Phase 1)
+    const sub = (loc as any).subtitle || (loc as any).category || existingInboundHotspot?.subtitle || existingInboundHotspot?.category || '';
+    setHotspotSubtitle(sub);
+
+    // 3. Category Icon Preset
+    const primaryIcon = (loc as any).icon || existingInboundHotspot?.icon || 'building';
+    setHotspotIcon(primaryIcon);
+
+    // 4. Custom Icon Upload (PNG/SVG)
+    const customIcon = (loc as any).customIconUrl || existingInboundHotspot?.customIconUrl || '';
+    setHotspotCustomIconUrl(customIcon);
+
+    // 5. Beacon Glow Theme Color
+    const beaconCol = (loc as any).beaconColor || existingInboundHotspot?.beaconColor || '#a855f7';
+    setHotspotBeaconColor(beaconCol);
+
+    // 6. Hotspot Visibility & Access (Selected Room's own visibility & client)
+    if (loc.isPublic !== undefined) {
+      setHotspotIsPublic(loc.isPublic);
+    } else if (existingInboundHotspot?.isPublic !== undefined) {
+      setHotspotIsPublic(existingInboundHotspot.isPublic);
+    } else {
+      setHotspotIsPublic(true);
+    }
+
+    const assignedUid = loc.assignedUserId || existingInboundHotspot?.assignedUserId || '';
+    setHotspotUserId(assignedUid);
+
+    // 7. Total Area (Optional)
+    const areaVal = (loc as any).area || existingInboundHotspot?.area || '';
+    setLandmarkArea(areaVal);
+
+    // 8. Details / Description (Optional) (Selected Room's own description)
+    const descVal = loc.description || existingInboundHotspot?.description || '';
+    setLandmarkDesc(descVal);
+  };
+
   const handleAddHotspotClick = (position: [number, number, number]) => {
     setPendingHotspotPos(position);
+    setEditingHotspotId(null);
+    setDrawingPoints([]);
     const otherLocs = locations.filter(l => l.id !== activeLocationId);
-    setSelectedTargetId(otherLocs.length > 0 ? otherLocs[0].id : '');
-    setHotspotMode(otherLocs.length > 0 ? 'existing' : 'new');
     setLinkToRoom(true);
-    setNewLinkRoomName('');
-    setLandmarkArea('');
-    setLandmarkDesc('');
-    setHotspotIsPublic(true);
-    setHotspotUserId('');
+
+    if (otherLocs.length > 0) {
+      setHotspotMode('existing');
+      populateFromExistingRoom(otherLocs[0].id);
+    } else {
+      setHotspotMode('new');
+      setSelectedTargetId('');
+      setNewLinkRoomName('');
+      setHotspotSubtitle('');
+      setHotspotIcon('building');
+      setHotspotCustomIconUrl('');
+      setHotspotBeaconColor('#a855f7');
+      setLandmarkArea('');
+      setLandmarkDesc('');
+      setHotspotIsPublic(true);
+      setHotspotUserId('');
+    }
+
     setShowLinkModal(true);
   };
 
@@ -944,15 +1009,25 @@ export default function App() {
     setPendingHotspotPos(centerPos);
 
     const otherRooms = locations.filter(l => l.id !== activeLocationId);
-    setSelectedTargetId(otherRooms.length > 0 ? otherRooms[0].id : '');
-    setHotspotMode(otherRooms.length > 0 ? 'existing' : 'new');
 
-    // If not editing an existing hotspot, reset inputs for a new outline
+    // If not editing an existing hotspot, initialize inputs
     if (!editingHotspotId) {
-      setLinkToRoom(false);
-      setNewLinkRoomName('');
-      setLandmarkArea('');
-      setLandmarkDesc('');
+      if (otherRooms.length > 0) {
+        setLinkToRoom(true);
+        setHotspotMode('existing');
+        populateFromExistingRoom(otherRooms[0].id);
+      } else {
+        setLinkToRoom(false);
+        setHotspotMode('new');
+        setSelectedTargetId('');
+        setNewLinkRoomName('');
+        setHotspotSubtitle('');
+        setHotspotIcon('building');
+        setHotspotCustomIconUrl('');
+        setHotspotBeaconColor('#a855f7');
+        setLandmarkArea('');
+        setLandmarkDesc('');
+      }
       setAreaType('building');
     }
 
@@ -1881,79 +1956,557 @@ export default function App() {
                     top: 0,
                     left: 0,
                     right: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.7)',
+                    backgroundColor: 'rgba(0,0,0,0.78)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     zIndex: 1002,
-                    backdropFilter: 'blur(4px)'
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    animation: 'fadeIn 0.2s ease-out'
                   }}>
                     <div style={{
-                      background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border-color)',
-                      padding: '24px',
-                      borderRadius: '8px',
-                      width: '380px',
-                      boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+                      background: 'linear-gradient(165deg, rgba(17, 22, 42, 0.97) 0%, rgba(10, 13, 26, 0.99) 100%)',
+                      border: '1px solid rgba(99, 102, 241, 0.35)',
+                      padding: '24px 28px',
+                      borderRadius: '24px',
+                      width: '100%',
+                      maxWidth: '520px',
+                      maxHeight: '90vh',
+                      overflowY: 'auto',
+                      boxShadow: '0 30px 80px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                      position: 'relative',
+                      color: '#ffffff',
+                      animation: 'modalSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
                     }}>
-                      <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '1.15rem' }}>
-                        {editingHotspotId ? 'Edit 3D Hotspot' : 'Create 3D Hotspot'}
-                      </h3>
+                      {/* Modal Header */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                        paddingBottom: '16px',
+                        marginBottom: '18px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '12px',
+                            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))',
+                            border: '1px solid rgba(99, 102, 241, 0.45)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#818cf8',
+                            boxShadow: '0 4px 14px rgba(99, 102, 241, 0.25)'
+                          }}>
+                            <Compass size={20} />
+                          </div>
+                          <div>
+                            <h3 style={{
+                              margin: 0,
+                              fontSize: '1.15rem',
+                              fontWeight: 800,
+                              background: 'linear-gradient(135deg, #ffffff 40%, #c7d2fe 100%)',
+                              WebkitBackgroundClip: 'text',
+                              WebkitTextFillColor: 'transparent'
+                            }}>
+                              {editingHotspotId ? 'Edit 3D Hotspot' : (drawingPoints.length > 0 ? 'Create 3D Area Boundary' : 'Create 3D Hotspot')}
+                            </h3>
+                            <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px' }}>
+                              Configure 3D beacon navigation, visuals & client access
+                            </p>
+                          </div>
+                        </div>
 
-                      {/* Hotspot Name Input */}
-                      <div className="form-group mb-3">
-                        <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Hotspot / Location Title *</label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          placeholder="e.g. ABCD Building, Water Treatment Plant"
-                          value={newLinkRoomName}
-                          onChange={(e) => setNewLinkRoomName(e.target.value)}
-                          autoFocus
-                        />
+                        <button
+                          type="button"
+                          onClick={() => { setShowLinkModal(false); setPendingHotspotPos(null); setIsPlacingHotspot(false); setIsDrawingArea(false); }}
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '10px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            color: '#94a3b8',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
 
-                      {/* Subtitle / Distance Badge Input */}
-                      <div className="form-group mb-3">
-                        <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                          Distance / Subtitle Badge <span style={{ color: '#94a3b8', fontWeight: 400 }}>(e.g. 5 km, Phase 1)</span>
-                        </label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          placeholder="e.g. 5 km, 101 km, 8.5 km, Commercial Zone"
-                          value={hotspotSubtitle}
-                          onChange={(e) => setHotspotSubtitle(e.target.value)}
-                        />
+                      {/* 1. TOP SECTION: LINK TO ANOTHER ROOM */}
+                      <div style={{
+                        background: linkToRoom ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.08))' : 'rgba(255, 255, 255, 0.02)',
+                        border: linkToRoom ? '1px solid rgba(99, 102, 241, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: '16px',
+                        padding: '14px 16px',
+                        marginBottom: '16px',
+                        transition: 'all 0.2s ease'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: linkToRoom ? '12px' : '0' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 700, color: linkToRoom ? '#ffffff' : '#cbd5e1', margin: 0 }}>
+                            <input
+                              type="checkbox"
+                              checked={linkToRoom}
+                              onChange={(e) => setLinkToRoom(e.target.checked)}
+                              style={{ width: '17px', height: '17px', accentColor: '#6366f1', cursor: 'pointer' }}
+                            />
+                            <span>🔗 Link to another Room / 360 View</span>
+                          </label>
+                          {linkToRoom && (
+                            <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '999px', background: 'rgba(99, 102, 241, 0.25)', border: '1px solid rgba(99, 102, 241, 0.4)', color: '#818cf8', fontWeight: 600 }}>
+                              Interactive Teleport
+                            </span>
+                          )}
+                        </div>
+
+                        {linkToRoom && (
+                          <div style={{ paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                            {/* Mode Radios: New vs Existing */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                              <label style={{
+                                padding: '10px 12px',
+                                borderRadius: '12px',
+                                cursor: 'pointer',
+                                border: hotspotMode === 'new' ? '1px solid #6366f1' : '1px solid rgba(255, 255, 255, 0.08)',
+                                background: hotspotMode === 'new' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(0, 0, 0, 0.25)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                fontSize: '0.8rem',
+                                fontWeight: hotspotMode === 'new' ? 700 : 500,
+                                color: hotspotMode === 'new' ? '#ffffff' : '#94a3b8'
+                              }}>
+                                <input
+                                  type="radio"
+                                  name="hotspot-mode"
+                                  checked={hotspotMode === 'new'}
+                                  onChange={() => {
+                                    setHotspotMode('new');
+                                    setSelectedTargetId('');
+                                  }}
+                                  style={{ accentColor: '#6366f1' }}
+                                />
+                                <span>➕ Create New Room</span>
+                              </label>
+
+                              <label style={{
+                                padding: '10px 12px',
+                                borderRadius: '12px',
+                                cursor: locations.filter(l => l.id !== activeLocationId).length > 0 ? 'pointer' : 'not-allowed',
+                                border: hotspotMode === 'existing' ? '1px solid #a855f7' : '1px solid rgba(255, 255, 255, 0.08)',
+                                background: hotspotMode === 'existing' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(0, 0, 0, 0.25)',
+                                opacity: locations.filter(l => l.id !== activeLocationId).length > 0 ? 1 : 0.45,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                fontSize: '0.8rem',
+                                fontWeight: hotspotMode === 'existing' ? 700 : 500,
+                                color: hotspotMode === 'existing' ? '#ffffff' : '#94a3b8'
+                              }}>
+                                <input
+                                  type="radio"
+                                  name="hotspot-mode"
+                                  disabled={locations.filter(l => l.id !== activeLocationId).length === 0}
+                                  checked={hotspotMode === 'existing'}
+                                  onChange={() => {
+                                    setHotspotMode('existing');
+                                    const otherRooms = locations.filter(l => l.id !== activeLocationId);
+                                    const chosenId = selectedTargetId || (otherRooms.length > 0 ? otherRooms[0].id : '');
+                                    if (chosenId) {
+                                      populateFromExistingRoom(chosenId);
+                                    }
+                                  }}
+                                  style={{ accentColor: '#a855f7' }}
+                                />
+                                <span>📍 Existing Room</span>
+                              </label>
+                            </div>
+
+                            {hotspotMode === 'new' ? (
+                              <div style={{ fontSize: '0.74rem', color: '#94a3b8', background: 'rgba(0, 0, 0, 0.25)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                ℹ️ A new room named <strong style={{ color: '#ffffff' }}>"{newLinkRoomName || 'Hotspot Name'}"</strong> will be created in your tour hierarchy.
+                              </div>
+                            ) : (
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '6px' }}>
+                                  Select Target Room *
+                                </label>
+                                <select
+                                  className="form-select"
+                                  value={selectedTargetId}
+                                  onChange={(e) => {
+                                    const chosenId = e.target.value;
+                                    if (chosenId) {
+                                      populateFromExistingRoom(chosenId);
+                                    } else {
+                                      setSelectedTargetId('');
+                                    }
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    backgroundColor: '#070913',
+                                    border: '1px solid #1e2438',
+                                    borderRadius: '12px',
+                                    padding: '9px 12px',
+                                    fontSize: '0.85rem',
+                                    color: '#ffffff',
+                                    outline: 'none'
+                                  }}
+                                >
+                                  <option value="">-- Choose target room to link --</option>
+                                  {locations.filter(l => l.id !== activeLocationId).map(loc => (
+                                    <option key={loc.id} value={loc.id}>📍 {loc.name}</option>
+                                  ))}
+                                </select>
+
+                                {/* Selected Existing Room Full Details Card */}
+                                {selectedTargetId && (() => {
+                                  const selectedLoc = locations.find(l => l.id === selectedTargetId);
+                                  if (!selectedLoc) return null;
+
+                                  const thumbUrl = selectedLoc.stitchedPanoPath
+                                    ? (selectedLoc.stitchedPanoPath.startsWith('http') || selectedLoc.stitchedPanoPath.startsWith('data:')
+                                      ? toCloudFrontUrl(selectedLoc.stitchedPanoPath)
+                                      : `${API_BASE_URL}/api/local-image?path=${encodeURIComponent(selectedLoc.stitchedPanoPath.replace(/^file:\/\/\/?/, ''))}`)
+                                    : (selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path)
+                                      ? ((selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path).startsWith('http') || (selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path).startsWith('data:')
+                                        ? toCloudFrontUrl(selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path)
+                                        : `${API_BASE_URL}/api/local-image?path=${encodeURIComponent((selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path).replace(/^file:\/\/\/?/, ''))}`)
+                                      : '';
+
+                                  const totalFacesCount = Object.values(selectedLoc.directions || {}).reduce((acc, curr) => acc + (curr?.length || 0), 0);
+
+                                  return (
+                                    <div style={{
+                                      marginTop: '12px',
+                                      padding: '12px 14px',
+                                      background: 'linear-gradient(135deg, rgba(20, 26, 50, 0.95), rgba(11, 15, 30, 0.98))',
+                                      border: '1px solid rgba(99, 102, 241, 0.35)',
+                                      borderRadius: '12px',
+                                      boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+                                      animation: 'fadeIn 0.2s ease'
+                                    }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '6px' }}>
+                                        <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                          <span>👁️</span> Selected Room Details
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => populateFromExistingRoom(selectedTargetId)}
+                                          style={{
+                                            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))',
+                                            border: '1px solid rgba(99, 102, 241, 0.5)',
+                                            borderRadius: '6px',
+                                            color: '#c7d2fe',
+                                            fontSize: '0.68rem',
+                                            fontWeight: 600,
+                                            padding: '2px 8px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                          }}
+                                          title="Re-populate all fields from this room"
+                                        >
+                                          ⚡ Auto-Fill All Fields
+                                        </button>
+                                      </div>
+
+                                      <div style={{ display: 'flex', gap: '12px' }}>
+                                        {/* Room Thumbnail Preview */}
+                                        <div style={{
+                                          width: '84px',
+                                          height: '56px',
+                                          borderRadius: '8px',
+                                          background: '#070913',
+                                          border: '1px solid rgba(255,255,255,0.12)',
+                                          overflow: 'hidden',
+                                          flexShrink: 0,
+                                          position: 'relative',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center'
+                                        }}>
+                                          {thumbUrl ? (
+                                            <img
+                                              src={thumbUrl}
+                                              alt={selectedLoc.name}
+                                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            />
+                                          ) : (
+                                            <span style={{ fontSize: '1.2rem' }}>🌐</span>
+                                          )}
+                                          <div style={{
+                                            position: 'absolute',
+                                            bottom: '2px',
+                                            right: '2px',
+                                            background: 'rgba(0,0,0,0.75)',
+                                            padding: '1px 4px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.6rem',
+                                            color: '#ffffff',
+                                            fontWeight: 600
+                                          }}>
+                                            360°
+                                          </div>
+                                        </div>
+
+                                        {/* Room Meta Information */}
+                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#ffffff', marginBottom: '2px' }}>
+                                            {selectedLoc.name}
+                                          </div>
+                                          {selectedLoc.description ? (
+                                            <div style={{ fontSize: '0.74rem', color: '#94a3b8', lineHeight: 1.3, maxHeight: '34px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                              {selectedLoc.description}
+                                            </div>
+                                          ) : (
+                                            <div style={{ fontSize: '0.72rem', color: '#64748b', fontStyle: 'italic' }}>
+                                              No room description added yet
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Stats Badges */}
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <span style={{ fontSize: '0.68rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)', color: '#c7d2fe' }}>
+                                          📸 {selectedLoc.stitchedPanoPath ? 'Full Panorama' : `${totalFacesCount} Tile Faces`}
+                                        </span>
+
+                                        <span style={{ fontSize: '0.68rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#e9d5ff' }}>
+                                          📍 {selectedLoc.hotspots?.length || 0} Hotspots
+                                        </span>
+
+                                        <span style={{ fontSize: '0.68rem', padding: '3px 8px', borderRadius: '6px', background: selectedLoc.isPublic !== false ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)', border: selectedLoc.isPublic !== false ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)', color: selectedLoc.isPublic !== false ? '#6ee7b7' : '#fde68a' }}>
+                                          {selectedLoc.isPublic !== false ? '🌐 Public' : '🔒 Private'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
-                      {/* Manual Custom Icon Upload */}
-                      <div className="form-group mb-3" style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <label className="form-label mb-0" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Custom Icon Upload (PNG/SVG)</label>
+                      {/* 2. HOTSPOT TITLE & SUBTITLE BADGE */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '6px' }}>
+                            Hotspot / Location Title *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. ABCD Building / Living Room"
+                            value={newLinkRoomName}
+                            onChange={(e) => setNewLinkRoomName(e.target.value)}
+                            style={{
+                              width: '100%',
+                              backgroundColor: '#070913',
+                              border: '1px solid #1e2438',
+                              borderRadius: '12px',
+                              padding: '10px 14px',
+                              fontSize: '0.85rem',
+                              color: '#ffffff',
+                              outline: 'none',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '6px' }}>
+                            Subtitle / Badge <span style={{ color: '#64748b' }}>(5 km)</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 5 km, Phase 1"
+                            value={hotspotSubtitle}
+                            onChange={(e) => setHotspotSubtitle(e.target.value)}
+                            style={{
+                              width: '100%',
+                              backgroundColor: '#070913',
+                              border: '1px solid #1e2438',
+                              borderRadius: '12px',
+                              padding: '10px 14px',
+                              fontSize: '0.85rem',
+                              color: '#ffffff',
+                              outline: 'none',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 3. DETAILS & AREA */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '12px', marginBottom: '14px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '6px' }}>
+                            Total Area <span style={{ color: '#64748b' }}>(Opt)</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 15,000 Sq. Ft"
+                            value={landmarkArea}
+                            onChange={(e) => setLandmarkArea(e.target.value)}
+                            style={{
+                              width: '100%',
+                              backgroundColor: '#070913',
+                              border: '1px solid #1e2438',
+                              borderRadius: '12px',
+                              padding: '10px 14px',
+                              fontSize: '0.85rem',
+                              color: '#ffffff',
+                              outline: 'none',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '6px' }}>
+                            Details / Description <span style={{ color: '#64748b' }}>(Opt)</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Furnished office, mountain view..."
+                            value={landmarkDesc}
+                            onChange={(e) => setLandmarkDesc(e.target.value)}
+                            style={{
+                              width: '100%',
+                              backgroundColor: '#070913',
+                              border: '1px solid #1e2438',
+                              borderRadius: '12px',
+                              padding: '10px 14px',
+                              fontSize: '0.85rem',
+                              color: '#ffffff',
+                              outline: 'none',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 4. BEACON GLOW THEME COLOR */}
+                      <div style={{ marginBottom: '14px', background: 'rgba(255, 255, 255, 0.02)', padding: '12px 14px', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', margin: 0 }}>
+                            Beacon Glow Theme Color
+                          </label>
+                          <span style={{ fontSize: '0.72rem', color: hotspotBeaconColor, fontWeight: 700, textTransform: 'uppercase' }}>
+                            {hotspotBeaconColor}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {[
+                            { color: '#a855f7', label: 'Violet' },
+                            { color: '#06b6d4', label: 'Cyan' },
+                            { color: '#10b981', label: 'Green' },
+                            { color: '#f59e0b', label: 'Amber' },
+                            { color: '#f43f5e', label: 'Rose' },
+                            { color: '#6366f1', label: 'Indigo' }
+                          ].map(item => (
+                            <button
+                              key={item.color}
+                              type="button"
+                              onClick={() => setHotspotBeaconColor(item.color)}
+                              style={{
+                                flex: 1,
+                                height: '32px',
+                                borderRadius: '8px',
+                                background: item.color,
+                                border: hotspotBeaconColor === item.color ? '2px solid #ffffff' : '1px solid rgba(255,255,255,0.15)',
+                                boxShadow: hotspotBeaconColor === item.color ? `0 0 14px ${item.color}` : 'none',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                transform: hotspotBeaconColor === item.color ? 'scale(1.05)' : 'scale(1)'
+                              }}
+                              title={item.label}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 5. ICON PRESET & CUSTOM UPLOAD */}
+                      <div style={{ marginBottom: '14px', background: 'rgba(255, 255, 255, 0.02)', padding: '12px 14px', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', margin: 0 }}>
+                            Category Icon & Preset
+                          </label>
                           {hotspotCustomIconUrl && (
                             <button
                               type="button"
                               onClick={() => setHotspotCustomIconUrl('')}
-                              style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer' }}
+                              style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}
                             >
-                              ✕ Remove
+                              ✕ Reset Custom Icon
                             </button>
                           )}
                         </div>
 
                         {hotspotCustomIconUrl ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', background: '#070913', borderRadius: '10px', border: '1px solid #10b981' }}>
                             <img
                               src={hotspotCustomIconUrl.startsWith('http') || hotspotCustomIconUrl.startsWith('data:') ? toCloudFrontUrl(hotspotCustomIconUrl) : `${API_BASE_URL}${hotspotCustomIconUrl.startsWith('/') ? '' : '/'}${hotspotCustomIconUrl}`}
                               alt="Custom Icon"
-                              style={{ width: '36px', height: '36px', objectFit: 'contain', background: 'rgba(0,0,0,0.4)', borderRadius: '6px', padding: '4px', border: '1px solid rgba(255,255,255,0.2)' }}
+                              style={{ width: '32px', height: '32px', objectFit: 'contain', background: 'rgba(0,0,0,0.4)', borderRadius: '6px', padding: '2px' }}
                             />
-                            <span style={{ fontSize: '0.75rem', color: '#10b981' }}>✓ Custom Icon Active</span>
+                            <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 600 }}>✓ Custom PNG/SVG Icon Active</span>
                           </div>
                         ) : (
-                          <div>
+                          <>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', maxHeight: '120px', overflowY: 'auto', marginBottom: '10px' }}>
+                              {[
+                                { value: 'building', label: '🏢 Building' },
+                                { value: 'airport', label: '✈️ Airport' },
+                                { value: 'factory', label: '🏭 Industry' },
+                                { value: 'energy', label: '⚡ Energy' },
+                                { value: 'water', label: '💧 Water' },
+                                { value: 'food', label: '🍽️ Food' },
+                                { value: 'canal', label: '🌊 Canal' },
+                                { value: 'nature', label: '🌳 Green' },
+                                { value: 'road', label: '🛣️ Road' },
+                                { value: 'arrow', label: '➜ Arrow' },
+                                { value: 'pin', label: '📍 Pin' },
+                                { value: 'info', label: 'ℹ Info' }
+                              ].map(opt => (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => setHotspotIcon(opt.value)}
+                                  style={{
+                                    padding: '6px 4px',
+                                    borderRadius: '8px',
+                                    border: hotspotIcon === opt.value ? '1px solid #6366f1' : '1px solid #1e2438',
+                                    background: hotspotIcon === opt.value ? 'rgba(99, 102, 241, 0.25)' : 'rgba(0,0,0,0.2)',
+                                    color: 'white',
+                                    fontSize: '0.7rem',
+                                    cursor: 'pointer',
+                                    fontWeight: hotspotIcon === opt.value ? 700 : 500,
+                                    textAlign: 'center',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                >
+                                  <span style={{ fontSize: '1rem' }}>{opt.label.split(' ')[0]}</span>
+                                  <span style={{ fontSize: '0.65rem' }}>{opt.label.split(' ')[1]}</span>
+                                </button>
+                              ))}
+                            </div>
+
                             <input
                               type="file"
                               accept="image/png, image/svg+xml, image/webp, image/jpeg"
@@ -1964,201 +2517,32 @@ export default function App() {
                             <label
                               htmlFor="hotspot-custom-icon-file"
                               style={{
-                                display: 'inline-flex',
+                                display: 'flex',
                                 alignItems: 'center',
+                                justifyContent: 'center',
                                 gap: '6px',
-                                background: 'rgba(99, 102, 241, 0.15)',
-                                border: '1px dashed rgba(99, 102, 241, 0.5)',
-                                color: '#a5b4fc',
-                                padding: '6px 12px',
-                                borderRadius: '6px',
-                                fontSize: '0.75rem',
-                                cursor: 'pointer',
-                                width: '100%',
-                                justifyContent: 'center'
+                                background: 'rgba(99, 102, 241, 0.12)',
+                                border: '1px dashed rgba(99, 102, 241, 0.45)',
+                                color: '#c7d2fe',
+                                padding: '8px 12px',
+                                borderRadius: '10px',
+                                fontSize: '0.74rem',
+                                fontWeight: 600,
+                                cursor: 'pointer'
                               }}
                             >
-                              {isUploadingCustomIcon ? '⏳ Uploading...' : '📤 Click to Upload Custom Icon (PNG/SVG)'}
+                              {isUploadingCustomIcon ? '⏳ Uploading...' : '📤 Or Upload Custom PNG/SVG Icon'}
                             </label>
-                          </div>
+                          </>
                         )}
                       </div>
 
-                      {/* Built-in Preset Icon Selector */}
-                      {!hotspotCustomIconUrl && (
-                        <div className="form-group mb-3">
-                          <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Or Select Category Icon Preset</label>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', maxHeight: '130px', overflowY: 'auto' }}>
-                            {[
-                              { value: 'building', label: '🏢 Building' },
-                              { value: 'airport', label: '✈️ Airport' },
-                              { value: 'factory', label: '🏭 Industry' },
-                              { value: 'energy', label: '⚡ Energy' },
-                              { value: 'water', label: '💧 Water' },
-                              { value: 'food', label: '🍽️ Food' },
-                              { value: 'canal', label: '🌊 Canal' },
-                              { value: 'nature', label: '🌳 Green' },
-                              { value: 'road', label: '🛣️ Road' },
-                              { value: 'arrow', label: '➜ Arrow' },
-                              { value: 'pin', label: '📍 Pin' },
-                              { value: 'info', label: 'ℹ Info' }
-                            ].map(opt => (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => setHotspotIcon(opt.value)}
-                                style={{
-                                  padding: '6px 4px',
-                                  borderRadius: '6px',
-                                  border: hotspotIcon === opt.value ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                                  background: hotspotIcon === opt.value ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-tertiary)',
-                                  color: 'white',
-                                  fontSize: '0.7rem',
-                                  cursor: 'pointer',
-                                  fontWeight: hotspotIcon === opt.value ? 'bold' : 'normal',
-                                  textAlign: 'center',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  gap: '2px'
-                                }}
-                              >
-                                <span style={{ fontSize: '1rem' }}>{opt.label.split(' ')[0]}</span>
-                                <span style={{ fontSize: '0.65rem' }}>{opt.label.split(' ')[1]}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Beacon Glow Color Theme */}
-                      <div className="form-group mb-3">
-                        <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Beacon Glow Theme Color</label>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          {[
-                            { color: '#a855f7', label: 'Violet' },
-                            { color: '#06b6d4', label: 'Cyan' },
-                            { color: '#10b981', label: 'Green' },
-                            { color: '#f59e0b', label: 'Amber' },
-                            { color: '#f43f5e', label: 'Rose' }
-                          ].map(item => (
-                            <button
-                              key={item.color}
-                              type="button"
-                              onClick={() => setHotspotBeaconColor(item.color)}
-                              style={{
-                                flex: 1,
-                                height: '28px',
-                                borderRadius: '6px',
-                                background: item.color,
-                                border: hotspotBeaconColor === item.color ? '2px solid #ffffff' : 'none',
-                                boxShadow: hotspotBeaconColor === item.color ? `0 0 10px ${item.color}` : 'none',
-                                cursor: 'pointer'
-                              }}
-                              title={item.label}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Optional Room Linking Toggle */}
-                      <div className="form-group" style={{ marginBottom: '12px' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 'bold' }}>
-                          <input
-                            type="checkbox"
-                            checked={linkToRoom}
-                            onChange={(e) => setLinkToRoom(e.target.checked)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                          Link to another Room
-                        </label>
-                      </div>
-
-                      {linkToRoom && (
-                        <div style={{
-                          background: 'var(--bg-tertiary)',
-                          border: '1px solid var(--border-color)',
-                          padding: '12px',
-                          borderRadius: '6px',
-                          marginBottom: '16px'
-                        }}>
-                          <div style={{ display: 'flex', gap: '16px', marginBottom: '10px' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
-                              <input
-                                type="radio"
-                                name="hotspot-mode"
-                                checked={hotspotMode === 'new'}
-                                onChange={() => {
-                                  setHotspotMode('new');
-                                  setSelectedTargetId('');
-                                }}
-                              />
-                              Create New Room
-                            </label>
-
-                            <label style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              fontSize: '0.8rem',
-                              cursor: locations.filter(l => l.id !== activeLocationId).length > 0 ? 'pointer' : 'not-allowed',
-                              opacity: locations.filter(l => l.id !== activeLocationId).length > 0 ? 1 : 0.5
-                            }}>
-                              <input
-                                type="radio"
-                                name="hotspot-mode"
-                                disabled={locations.filter(l => l.id !== activeLocationId).length === 0}
-                                checked={hotspotMode === 'existing'}
-                                onChange={() => {
-                                  setHotspotMode('existing');
-                                  if (selectedTargetId) {
-                                    const loc = locations.find(l => l.id === selectedTargetId);
-                                    if (loc) setNewLinkRoomName(loc.name);
-                                  }
-                                }}
-                              />
-                              Existing Room
-                            </label>
-                          </div>
-
-                          {hotspotMode === 'new' ? (
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                              A new empty room named <strong>"{newLinkRoomName || 'Hotspot Name'}"</strong> will be created.
-                            </div>
-                          ) : (
-                            <div className="form-group" style={{ margin: 0 }}>
-                              <label className="form-label">Select existing Room *</label>
-                              <select
-                                className="form-select"
-                                value={selectedTargetId}
-                                onChange={(e) => {
-                                  const chosenId = e.target.value;
-                                  setSelectedTargetId(chosenId);
-                                  if (chosenId) {
-                                    const loc = locations.find(l => l.id === chosenId);
-                                    if (loc) {
-                                      setNewLinkRoomName(loc.name);
-                                    }
-                                  } else {
-                                    setNewLinkRoomName('');
-                                  }
-                                }}
-                              >
-                                <option value="">-- Please select a room --</option>
-                                {locations.filter(l => l.id !== activeLocationId).map(loc => (
-                                  <option key={loc.id} value={loc.id}>📍 {loc.name}</option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Area Type/Style Selector */}
+                      {/* 6. AREA STYLE (If Drawing) */}
                       {(drawingPoints.length > 0 || (editingHotspotId && activeLoc?.hotspots?.find(h => h.id === editingHotspotId)?.polygonPoints)) && (
-                        <div className="form-group">
-                          <label className="form-label">Select Area Style</label>
+                        <div style={{ marginBottom: '14px', background: 'rgba(255, 255, 255, 0.02)', padding: '12px 14px', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '8px' }}>
+                            Area Style / Overlay
+                          </label>
                           <div style={{ display: 'flex', gap: '8px' }}>
                             {[
                               { value: 'building', label: '🏢 Area (Purple)' },
@@ -2172,83 +2556,97 @@ export default function App() {
                                 style={{
                                   flex: 1,
                                   padding: '8px',
-                                  borderRadius: '4px',
-                                  border: areaType === opt.value ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                                  background: areaType === opt.value ? 'rgba(99, 102, 241, 0.15)' : 'var(--bg-tertiary)',
+                                  borderRadius: '8px',
+                                  border: areaType === opt.value ? '1px solid #6366f1' : '1px solid #1e2438',
+                                  background: areaType === opt.value ? 'rgba(99, 102, 241, 0.25)' : 'rgba(0,0,0,0.2)',
                                   color: 'white',
                                   fontSize: '0.75rem',
                                   cursor: 'pointer',
-                                  fontWeight: areaType === opt.value ? 'bold' : 'normal',
-                                  textAlign: 'center',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  gap: '4px',
-                                  transition: 'all 0.1s ease'
+                                  fontWeight: areaType === opt.value ? 700 : 500
                                 }}
                               >
-                                <span style={{ fontSize: '0.9rem' }}>{opt.label.split(' ')[0]}</span>
-                                <span>{opt.label.split(' ')[1]}</span>
+                                {opt.label}
                               </button>
                             ))}
                           </div>
                         </div>
                       )}
 
-                      {/* Hotspot Access & Visibility Settings */}
-                      <div className="form-group" style={{ marginBottom: '16px', background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                        <label className="form-label" style={{ fontWeight: 'bold', marginBottom: '8px' }}>Hotspot Visibility & Access</label>
+                      {/* 7. VISIBILITY & ACCESS */}
+                      <div style={{ marginBottom: '18px', background: 'rgba(255, 255, 255, 0.02)', padding: '12px 14px', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                        <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '8px' }}>
+                          Hotspot Visibility & Access
+                        </label>
 
                         {crmProjectIsPublic ? (
-                          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: (!hotspotIsPublic ? '10px' : '0') }}>
                             <button
                               type="button"
                               onClick={() => setHotspotIsPublic(true)}
                               style={{
-                                flex: 1,
-                                padding: '8px',
-                                borderRadius: '6px',
-                                border: hotspotIsPublic ? '2px solid #10b981' : '1px solid var(--border-color)',
-                                background: hotspotIsPublic ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-secondary)',
-                                color: 'white',
-                                fontSize: '0.75rem',
+                                padding: '9px 12px',
+                                borderRadius: '10px',
+                                border: hotspotIsPublic ? '1px solid #10b981' : '1px solid #1e2438',
+                                background: hotspotIsPublic ? 'rgba(16, 185, 129, 0.2)' : 'rgba(0,0,0,0.2)',
+                                color: hotspotIsPublic ? '#6ee7b7' : '#94a3b8',
+                                fontSize: '0.78rem',
                                 cursor: 'pointer',
-                                fontWeight: hotspotIsPublic ? 'bold' : 'normal'
+                                fontWeight: hotspotIsPublic ? 700 : 500,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px'
                               }}
                             >
-                              🌐 Public Hotspot
+                              <span>🌐</span> Public Hotspot
                             </button>
+
                             <button
                               type="button"
                               onClick={() => setHotspotIsPublic(false)}
                               style={{
-                                flex: 1,
-                                padding: '8px',
-                                borderRadius: '6px',
-                                border: !hotspotIsPublic ? '2px solid #f59e0b' : '1px solid var(--border-color)',
-                                background: !hotspotIsPublic ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-secondary)',
-                                color: 'white',
-                                fontSize: '0.75rem',
+                                padding: '9px 12px',
+                                borderRadius: '10px',
+                                border: !hotspotIsPublic ? '1px solid #f59e0b' : '1px solid #1e2438',
+                                background: !hotspotIsPublic ? 'rgba(245, 158, 11, 0.2)' : 'rgba(0,0,0,0.2)',
+                                color: !hotspotIsPublic ? '#fde68a' : '#94a3b8',
+                                fontSize: '0.78rem',
                                 cursor: 'pointer',
-                                fontWeight: !hotspotIsPublic ? 'bold' : 'normal'
+                                fontWeight: !hotspotIsPublic ? 700 : 500,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px'
                               }}
                             >
-                              🔒 Private Hotspot
+                              <span>🔒</span> Private Hotspot
                             </button>
                           </div>
                         ) : (
-                          <div style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #f59e0b', background: 'rgba(245, 158, 11, 0.15)', color: 'white', fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '8px' }}>
-                            🔒 Private Project Active: Public Hotspot option is HIDDEN. All hotspots are strictly Private.
+                          <div style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #f59e0b', background: 'rgba(245, 158, 11, 0.12)', color: '#fde68a', fontSize: '0.74rem', fontWeight: 600, marginBottom: '8px' }}>
+                            🔒 Private Project Active: All hotspots are strictly Private.
                           </div>
                         )}
 
                         {(!hotspotIsPublic || !crmProjectIsPublic) && (
-                          <div style={{ marginTop: '8px' }}>
-                            <label className="form-label" style={{ fontSize: '0.75rem', color: '#f59e0b' }}>Assign to Specific Client *</label>
+                          <div style={{ marginTop: '10px' }}>
+                            <label style={{ display: 'block', fontSize: '0.7rem', color: '#f59e0b', fontWeight: 600, marginBottom: '4px' }}>
+                              Assign to Specific Client Account *
+                            </label>
                             <select
                               className="form-select"
                               value={hotspotUserId}
                               onChange={(e) => setHotspotUserId(e.target.value)}
+                              style={{
+                                width: '100%',
+                                backgroundColor: '#070913',
+                                border: '1px solid #1e2438',
+                                borderRadius: '10px',
+                                padding: '8px 12px',
+                                fontSize: '0.8rem',
+                                color: '#ffffff',
+                                outline: 'none'
+                              }}
                             >
                               <option value="">Select Assigned Client Account...</option>
                               {clientUsersList.map(c => (
@@ -2261,41 +2659,39 @@ export default function App() {
                         )}
                       </div>
 
-                      {/* Landmark Details (Area, Description) */}
-                      <div className="form-group">
-                        <label className="form-label">Total Area (Optional)</label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          placeholder="e.g. 15,000 Sq. Ft, 2 Acres"
-                          value={landmarkArea}
-                          onChange={(e) => setLandmarkArea(e.target.value)}
-                        />
-                      </div>
-
-                      <div className="form-group">
-                        <label className="form-label">Details / Description (Optional)</label>
-                        <textarea
-                          className="form-input"
-                          style={{ height: '60px', resize: 'none', fontFamily: 'inherit' }}
-                          placeholder="e.g. Fully furnished, garden view..."
-                          value={landmarkDesc}
-                          onChange={(e) => setLandmarkDesc(e.target.value)}
-                        />
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px' }}>
+                      {/* 8. FOOTER ACTION BUTTONS */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
                         <button
-                          className="btn"
                           type="button"
                           onClick={() => { setShowLinkModal(false); setPendingHotspotPos(null); setIsPlacingHotspot(false); setIsDrawingArea(false); }}
+                          style={{
+                            padding: '9px 18px',
+                            borderRadius: '12px',
+                            background: 'rgba(255, 255, 255, 0.06)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            color: '#cbd5e1',
+                            fontSize: '0.82rem',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
                         >
                           Cancel
                         </button>
+
                         <button
-                          className="btn btn-primary"
                           type="button"
                           onClick={handleLinkHotspot}
+                          style={{
+                            padding: '9px 24px',
+                            borderRadius: '12px',
+                            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
+                            border: 'none',
+                            color: '#ffffff',
+                            fontSize: '0.84rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            boxShadow: '0 8px 24px rgba(99, 102, 241, 0.45)'
+                          }}
                         >
                           {editingHotspotId ? 'Save Changes' : (drawingPoints.length > 0 ? 'Save Area Outline' : 'Create Hotspot')}
                         </button>
