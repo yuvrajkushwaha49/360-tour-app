@@ -301,29 +301,29 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
           </button>
 
-          <div className="smart-portal-logo" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
+          <div className="smart-portal-logo">
             {clientLogo && (
               <div
                 style={{
-                  width: '15%',
-
-                  overflow: 'hidden',
+                  height: '36px',
+                  maxWidth: '140px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  marginLeft: '8px',
-                  flexShrink: 0,
-                  boxShadow: '0 4px 14px rgba(0, 0, 0, 0.6)'
+                  flexShrink: 0
                 }}
               >
                 <img
                   src={toCloudFrontUrl(clientLogo)}
                   alt="Client Brand Logo"
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
                 />
               </div>
             )}
-
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span className="smart-portal-title">{displayName}</span>
+              <span className="smart-portal-tagline">SMART VIRTUAL TOUR</span>
+            </div>
           </div>
         </div>
 

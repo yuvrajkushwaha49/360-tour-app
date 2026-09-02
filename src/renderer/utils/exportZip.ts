@@ -245,12 +245,12 @@ export async function exportProjectToZip(
     #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
     
     /* Top Floating Header */
-    .top-header {
-      position: absolute; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 100;
+    .smart-portal-header, .top-header {
+      position: absolute; top: 1rem; left: 1.25rem; right: 1.25rem; z-index: 100;
       background: rgba(15, 18, 28, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
       border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 1.25rem; padding: 0.6rem 1.5rem;
-      display: flex; align-items: center; gap: 1.25rem; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
-      max-width: 90vw;
+      display: flex !important; align-items: center !important; justify-content: space-between !important;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6); width: auto; box-sizing: border-box;
     }
     .tour-title { font-size: 1rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 0.6rem; white-space: nowrap; }
     .vr-badge { font-size: 0.65rem; font-weight: 700; color: #818cf8; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.35); padding: 0.2rem 0.6rem; border-radius: 50rem; text-transform: uppercase; letter-spacing: 0.05em; }
