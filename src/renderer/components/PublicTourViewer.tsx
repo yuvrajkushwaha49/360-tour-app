@@ -320,10 +320,6 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                 />
               </div>
             )}
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span className="smart-portal-title">{displayName}</span>
-              <span className="smart-portal-tagline">SMART VIRTUAL TOUR</span>
-            </div>
           </div>
         </div>
 
