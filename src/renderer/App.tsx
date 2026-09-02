@@ -99,7 +99,7 @@ interface LocationItem {
   gridConfigs: Record<string, string>;
   stitchedPanoPath: string | null;
   hotspots: HotspotItem[];
-    adjustments?: ImageAdjustments;
+  adjustments?: ImageAdjustments;
 }
 
 export default function App() {
@@ -174,7 +174,7 @@ export default function App() {
       setCurrentProjectId(null);
       setCrmProjectName('');
       deleteLargeDraft('studio_draft_project');
-      try { localStorage.removeItem('studio_draft_project'); } catch (e) {}
+      try { localStorage.removeItem('studio_draft_project'); } catch (e) { }
     };
     window.addEventListener('clear-studio-draft', handleClearDraft);
     return () => window.removeEventListener('clear-studio-draft', handleClearDraft);
@@ -226,7 +226,7 @@ export default function App() {
     setActiveView(view);
     localStorage.setItem('active_view', view);
   };
-  
+
   const [activeRightTab, setActiveRightTab] = useState<'stitch' | 'adjustments'>('stitch');
 
   const handleUpdateActiveLocAdjustments = (newAdj: ImageAdjustments) => {
@@ -568,7 +568,7 @@ export default function App() {
       };
       localList.unshift(newProjItem);
       safeLocalStorageSet('local_saved_projects', JSON.stringify(localList));
-    } catch (e) {}
+    } catch (e) { }
 
     // 4. Save into SQLite backend database
     let token = authToken || localStorage.getItem('crm_token');
@@ -588,7 +588,7 @@ export default function App() {
           localStorage.setItem('crm_token', authData.token);
           localStorage.setItem('crm_user', JSON.stringify(authData.user));
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (token) {
@@ -1126,7 +1126,7 @@ export default function App() {
         localList.unshift(newProjItem);
       }
       safeLocalStorageSet('local_saved_projects', JSON.stringify(localList));
-    } catch (e) {}
+    } catch (e) { }
 
     addLog(`💾 Project "${projName}" saved to file and synced to Home Page!`);
   };
@@ -1374,7 +1374,7 @@ export default function App() {
               }
               const imgElem = await loadImage(imgSrc);
               ctx.drawImage(imgElem, idx * sectionW, 0, sectionW, sectionH);
-            } catch (e) {}
+            } catch (e) { }
           }
         }
 
@@ -1481,7 +1481,7 @@ export default function App() {
                     handleViewChange('crm');
                     return;
                   }
-                } catch (e) {}
+                } catch (e) { }
               }
               handleViewChange(currentUser ? 'crm' : 'login');
             }}
@@ -1598,16 +1598,6 @@ export default function App() {
 
           {/* User Account / Auth Section */}
           <div className="ps-3 border-start border-secondary border-opacity-25 d-flex align-items-center gap-2">
-            {currentUser?.role === 'admin' && (
-              <button
-                onClick={() => setIsAddUserModalOpen(true)}
-                className="btn btn-sm btn-warning text-dark font-weight-normal rounded-3 px-3 d-flex align-items-center gap-1 shadow-sm"
-                title="Create New Client / User Account"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>+ Create Client</span>
-              </button>
-            )}
 
             {currentUser ? (
               <div className="d-flex align-items-center gap-2 bg-secondary bg-opacity-25 px-3 py-1.5 rounded-3 border border-secondary border-opacity-25">
@@ -1718,7 +1708,7 @@ export default function App() {
                                   Public
                                 </span>
                               ) : (
-                                <span className="badge bg-warning bg-opacity-20 text-warning border border-warning border-opacity-30 rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1" style={{ fontSize: '0.65rem' }} title={`Assigned to ${loc.assignedUserName || 'Client'}`}>
+                                <span className="badge bg-opacity-20 text-warning border border-warning border-opacity-30 rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1" style={{ fontSize: '0.65rem' }} title={`Assigned to ${loc.assignedUserName || 'Client'}`}>
                                   <Lock size={10} />
                                   <span>{loc.assignedUserName || 'Private'}</span>
                                 </span>
@@ -1839,7 +1829,7 @@ export default function App() {
               <div id="interactive-workspace-wrapper" style={{ flex: 1, overflow: 'hidden', background: '#090a0d', position: 'relative' }}>
                 {Object.values(directions).some(arr => arr.length > 0) ? (
                   <Viewer360
-                  adjustments={activeLoc?.adjustments || DEFAULT_ADJUSTMENTS}
+                    adjustments={activeLoc?.adjustments || DEFAULT_ADJUSTMENTS}
                     directions={directions}
                     gridConfigs={gridConfigs}
                     hotspots={activeLoc?.hotspots || []}
@@ -2379,148 +2369,148 @@ export default function App() {
                   />
                 ) : (
                   <>
-                {/* Hotspots Manager Panel */}
-                {activeLoc && (
-                  <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--text-secondary)', display: 'block', marginBottom: '10px' }}>
-                      Hotspots in "{activeLoc.name}"
-                    </span>
+                    {/* Hotspots Manager Panel */}
+                    {activeLoc && (
+                      <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--text-secondary)', display: 'block', marginBottom: '10px' }}>
+                          Hotspots in "{activeLoc.name}"
+                        </span>
 
-                    {(!activeLoc.hotspots || activeLoc.hotspots.length === 0) ? (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '10px', border: '1px dashed var(--border-color)', borderRadius: '6px' }}>
-                        No hotspots added. Click "+ Add Hotspot" inside the 360 viewer to link this room to another room.
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto' }}>
-                        {activeLoc.hotspots.map(hs => (
-                          <div
-                            key={hs.id}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '6px 10px',
-                              background: 'var(--bg-tertiary)',
-                              border: '1px solid var(--border-color)',
-                              borderRadius: '4px',
-                              fontSize: '0.8rem'
-                            }}
-                          >
-                            <span>➜ {hs.name}</span>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button
-                                onClick={() => handleEditHotspotClick(hs)}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  color: 'var(--accent-color)',
-                                  cursor: 'pointer',
-                                  fontSize: '0.8rem',
-                                  padding: '2px'
-                                }}
-                                title="Edit Hotspot"
-                              >
-                                ✏
-                              </button>
-                              <button
-                                onClick={() => {
-                                  updateActiveLocation(loc => ({
-                                    hotspots: (loc.hotspots || []).filter(h => h.id !== hs.id)
-                                  }));
-                                  addLog(`Removed hotspot: ${hs.name}`);
-                                }}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  color: 'var(--accent-error)',
-                                  cursor: 'pointer',
-                                  fontSize: '0.75rem',
-                                  padding: '2px'
-                                }}
-                                title="Remove Hotspot"
-                              >
-                                ✕
-                              </button>
-                            </div>
+                        {(!activeLoc.hotspots || activeLoc.hotspots.length === 0) ? (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '10px', border: '1px dashed var(--border-color)', borderRadius: '6px' }}>
+                            No hotspots added. Click "+ Add Hotspot" inside the 360 viewer to link this room to another room.
                           </div>
-                        ))}
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto' }}>
+                            {activeLoc.hotspots.map(hs => (
+                              <div
+                                key={hs.id}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '6px 10px',
+                                  background: 'var(--bg-tertiary)',
+                                  border: '1px solid var(--border-color)',
+                                  borderRadius: '4px',
+                                  fontSize: '0.8rem'
+                                }}
+                              >
+                                <span>➜ {hs.name}</span>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button
+                                    onClick={() => handleEditHotspotClick(hs)}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: 'var(--accent-color)',
+                                      cursor: 'pointer',
+                                      fontSize: '0.8rem',
+                                      padding: '2px'
+                                    }}
+                                    title="Edit Hotspot"
+                                  >
+                                    ✏
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      updateActiveLocation(loc => ({
+                                        hotspots: (loc.hotspots || []).filter(h => h.id !== hs.id)
+                                      }));
+                                      addLog(`Removed hotspot: ${hs.name}`);
+                                    }}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: 'var(--accent-error)',
+                                      cursor: 'pointer',
+                                      fontSize: '0.75rem',
+                                      padding: '2px'
+                                    }}
+                                    title="Remove Hotspot"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
 
-                <div className="form-group mb-3">
-                  <label className="form-label text-secondary small font-weight-normal mb-1">Output Resolution</label>
-                  <select className="form-select studio-select" value={resolution} onChange={(e) => setResolution(Number(e.target.value))}>
-                    <option value={2048}>2K Panorama (2048 x 1024)</option>
-                    <option value={4096}>4K Panorama (4096 x 2048)</option>
-                    <option value={8192}>8K Panorama (8192 x 4096)</option>
-                    <option value={16384}>16K Ultra-Res (16384 x 8192)</option>
-                  </select>
-                </div>
+                    <div className="form-group mb-3">
+                      <label className="form-label text-secondary small font-weight-normal mb-1">Output Resolution</label>
+                      <select className="form-select studio-select" value={resolution} onChange={(e) => setResolution(Number(e.target.value))}>
+                        <option value={2048}>2K Panorama (2048 x 1024)</option>
+                        <option value={4096}>4K Panorama (4096 x 2048)</option>
+                        <option value={8192}>8K Panorama (8192 x 4096)</option>
+                        <option value={16384}>16K Ultra-Res (16384 x 8192)</option>
+                      </select>
+                    </div>
 
-                <div className="form-group mb-3">
-                  <label className="form-label text-secondary small font-weight-normal mb-1">Feature Detector</label>
-                  <select className="form-select studio-select" value={featureDetector} onChange={(e) => setFeatureDetector(e.target.value)}>
-                    <option value="ORB">ORB (Fast / Hardware Safe)</option>
-                    <option value="SIFT">SIFT (High Quality / Detailed)</option>
-                  </select>
-                </div>
+                    <div className="form-group mb-3">
+                      <label className="form-label text-secondary small font-weight-normal mb-1">Feature Detector</label>
+                      <select className="form-select studio-select" value={featureDetector} onChange={(e) => setFeatureDetector(e.target.value)}>
+                        <option value="ORB">ORB (Fast / Hardware Safe)</option>
+                        <option value="SIFT">SIFT (High Quality / Detailed)</option>
+                      </select>
+                    </div>
 
-                <div className="form-group mb-3">
-                  <label className="form-label text-secondary small font-weight-normal mb-1">Blending Mode</label>
-                  <select className="form-select studio-select" value={blendingMode} onChange={(e) => setBlendingMode(e.target.value)}>
-                    <option value="multi-band">Multi-Band Blending (Seamless)</option>
-                    <option value="linear">Linear Blending (Fast)</option>
-                  </select>
-                </div>
+                    <div className="form-group mb-3">
+                      <label className="form-label text-secondary small font-weight-normal mb-1">Blending Mode</label>
+                      <select className="form-select studio-select" value={blendingMode} onChange={(e) => setBlendingMode(e.target.value)}>
+                        <option value="multi-band">Multi-Band Blending (Seamless)</option>
+                        <option value="linear">Linear Blending (Fast)</option>
+                      </select>
+                    </div>
 
-                <div className="form-group d-flex align-items-center gap-2 mt-3 mb-4">
-                  <input
-                    type="checkbox"
-                    id="exp"
-                    className="form-check-input"
-                    checked={exposureCorrection}
-                    onChange={(e) => setExposureCorrection(e.target.checked)}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <label htmlFor="exp" className="form-check-label text-white small font-weight-normal" style={{ cursor: 'pointer' }}>
-                    Exposure Match Correction
-                  </label>
-                </div>
+                    <div className="form-group d-flex align-items-center gap-2 mt-3 mb-4">
+                      <input
+                        type="checkbox"
+                        id="exp"
+                        className="form-check-input"
+                        checked={exposureCorrection}
+                        onChange={(e) => setExposureCorrection(e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <label htmlFor="exp" className="form-check-label text-white small font-weight-normal" style={{ cursor: 'pointer' }}>
+                        Exposure Match Correction
+                      </label>
+                    </div>
 
-                <div className="mb-4">
-                  <button
-                    className="btn btn-primary w-100 py-2.5 rounded-3 font-weight-normal shadow d-flex align-items-center justify-content-center gap-2"
-                    onClick={handleRunStitch}
-                    disabled={loading}
-                  >
-                    <Play size={16} /> Run Image Engine
-                  </button>
-                </div>
-
-                {stitchedPanoPath && (
-                  <div className="pt-3 border-top border-secondary border-opacity-25 mt-4">
-                    <span className="small text-secondary font-weight-bold text-uppercase d-block mb-3" style={{ fontSize: '0.72rem', letterSpacing: '0.5px' }}>
-                      Export Options
-                    </span>
-                    <div className="d-flex flex-column gap-1">
-                      <button className="btn-export-link" onClick={() => addLog('Exported panorama as JPG successfully')}>
-                        <span>Export JPG Image</span>
-                        <FileText size={14} className="text-secondary" />
-                      </button>
-                      <button className="btn-export-link" onClick={() => addLog('Exported panorama as PNG successfully')}>
-                        <span>Export PNG Image</span>
-                        <ImageIcon size={14} className="text-secondary" />
-                      </button>
-                      <button className="btn-export-link" onClick={() => addLog('Exported VR Tiles HTML player template')}>
-                        <span>Export Web Tour (HTML)</span>
-                        <Globe size={14} className="text-secondary" />
+                    <div className="mb-4">
+                      <button
+                        className="btn btn-primary w-100 py-2.5 rounded-3 font-weight-normal shadow d-flex align-items-center justify-content-center gap-2"
+                        onClick={handleRunStitch}
+                        disabled={loading}
+                      >
+                        <Play size={16} /> Run Image Engine
                       </button>
                     </div>
-                  </div>
-                )}
-                </>
+
+                    {stitchedPanoPath && (
+                      <div className="pt-3 border-top border-secondary border-opacity-25 mt-4">
+                        <span className="small text-secondary font-weight-bold text-uppercase d-block mb-3" style={{ fontSize: '0.72rem', letterSpacing: '0.5px' }}>
+                          Export Options
+                        </span>
+                        <div className="d-flex flex-column gap-1">
+                          <button className="btn-export-link" onClick={() => addLog('Exported panorama as JPG successfully')}>
+                            <span>Export JPG Image</span>
+                            <FileText size={14} className="text-secondary" />
+                          </button>
+                          <button className="btn-export-link" onClick={() => addLog('Exported panorama as PNG successfully')}>
+                            <span>Export PNG Image</span>
+                            <ImageIcon size={14} className="text-secondary" />
+                          </button>
+                          <button className="btn-export-link" onClick={() => addLog('Exported VR Tiles HTML player template')}>
+                            <span>Export Web Tour (HTML)</span>
+                            <Globe size={14} className="text-secondary" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

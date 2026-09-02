@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Layers, ShieldCheck, Sparkles } from 'lucide-react';
+import { Mail, Lock, Layers, Eye, EyeOff } from 'lucide-react';
 import { API_BASE_URL } from '../utils/apiConfig';
 
 interface ClientLoginPageProps {
@@ -10,6 +10,7 @@ interface ClientLoginPageProps {
 export default function ClientLoginPage({ onSuccess, onBack }: ClientLoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,13 +97,23 @@ export default function ClientLoginPage({ onSuccess, onBack }: ClientLoginPagePr
                         <Lock className="w-4 h-4" />
                       </div>
                       <input
-                        type="password"
+                        type={showPassword ? "text" : "password"}
                         required
                         placeholder="Enter your password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="form-control login-input-box"
+                        style={{ paddingRight: '2.75rem' }}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="btn btn-link position-absolute end-0 top-50 translate-middle-y text-secondary text-decoration-none p-0 pe-3"
+                        style={{ zIndex: 10, background: 'none', border: 'none' }}
+                        title={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
                     </div>
                   </div>
 

@@ -333,12 +333,62 @@ const GridFace: React.FC<GridFaceProps> = ({ images, faceKey, gridSize, onTileDo
 };
 
 const getPolygonMesh = (pts: [number, number, number][]) => {
-  if (pts.length < 3) return null;
-  const vertices = new Float32Array(pts.flatMap(p => p));
-  const indices: number[] = [];
-  for (let i = 1; i < pts.length - 1; i++) {
-    indices.push(0, i, i + 1);
+  if (!pts || pts.length < 3) return null;
+
+  // 1. Calculate Polygon Normal using Newell's method for arbitrary 3D orientation
+  const normal = new THREE.Vector3(0, 0, 0);
+  for (let i = 0; i < pts.length; i++) {
+    const current = new THREE.Vector3(...pts[i]);
+    const next = new THREE.Vector3(...pts[(i + 1) % pts.length]);
+    normal.x += (current.y - next.y) * (current.z + next.z);
+    normal.y += (current.z - next.z) * (current.x + next.x);
+    normal.z += (current.x - next.x) * (current.y + next.y);
   }
+  normal.normalize();
+
+  // If normal is zero/degenerate, fallback to cross product of first 3 points
+  if (normal.lengthSq() < 0.0001) {
+    const v0 = new THREE.Vector3(...pts[0]);
+    const v1 = new THREE.Vector3(...pts[1]);
+    const v2 = new THREE.Vector3(...pts[2]);
+    normal.crossVectors(v1.clone().sub(v0), v2.clone().sub(v0)).normalize();
+  }
+
+  // 2. Construct Orthonormal 2D basis (uAxis, vAxis) perpendicular to normal
+  let uAxis = new THREE.Vector3(1, 0, 0);
+  if (Math.abs(normal.dot(uAxis)) > 0.9) {
+    uAxis = new THREE.Vector3(0, 1, 0);
+  }
+  const vAxis = new THREE.Vector3().crossVectors(normal, uAxis).normalize();
+  uAxis.crossVectors(vAxis, normal).normalize();
+
+  // 3. Project 3D points onto 2D plane for clean planar triangulation
+  const points2D = pts.map(p => {
+    const vec = new THREE.Vector3(...p);
+    return new THREE.Vector2(vec.dot(uAxis), vec.dot(vAxis));
+  });
+
+  // 4. Robust Ear-Clipping Triangulation using THREE.ShapeUtils
+  let triangles: number[][] = [];
+  try {
+    triangles = THREE.ShapeUtils.triangulateShape(points2D, []);
+  } catch (e) {
+    triangles = [];
+  }
+
+  // Fallback if triangulation returned empty or failed
+  if (!triangles || triangles.length === 0) {
+    for (let i = 1; i < pts.length - 1; i++) {
+      triangles.push([0, i, i + 1]);
+    }
+  }
+
+  const indices: number[] = [];
+  for (const tri of triangles) {
+    indices.push(tri[0], tri[1], tri[2]);
+  }
+
+  const vertices = new Float32Array(pts.flatMap(p => p));
   return { vertices, indices: new Uint16Array(indices) };
 };
 
@@ -617,6 +667,7 @@ interface SceneGroupProps {
   onDeleteHotspot: (id: string) => void;
   onAddAreaOutline: (hs: HotspotItem) => void;
   areaType: 'building' | 'river' | 'road';
+  isPreloading?: boolean;
 }
 
 const SceneGroup: React.FC<SceneGroupProps> = ({
@@ -637,7 +688,8 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
   onEditHotspot,
   onDeleteHotspot,
   onAddAreaOutline,
-  areaType
+  areaType,
+  isPreloading = false
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const [activeInfoId, setActiveInfoId] = useState<string | null>(null);
@@ -725,8 +777,8 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
         </React.Suspense>
       ))}
 
-      {/* Render 3D saved hotspots and area lines with Public vs Private authorization */}
-      {safeHotspots
+      {/* Render 3D saved hotspots and area lines ONLY when isPreloading === false */}
+      {!isPreloading && safeHotspots
         .filter(h => {
           if (h.isPublic === false) {
             try {
@@ -747,25 +799,27 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
           // Healing fallback for older saved project files
           const resolvedAreaType = h.areaType || (hasPolygon && h.icon === 'arrow' ? 'road' : 'building');
 
-          // Dynamic colors based on Area Style
-          let lineColor = '#a855f7'; // Purple / Violet
-          let overlayColor = '#a855f7';
-          let overlayOpacity = 0.35;
+          // Dynamic colors based on Area Style and Hotspot Beacon Color
+          let lineColor = h.beaconColor || '#a855f7'; // Purple / Violet or configured theme
+          let overlayColor = h.beaconColor || '#a855f7';
+          let overlayOpacity = 0.25;
 
           if (resolvedAreaType === 'river') {
             lineColor = '#3b82f6';
             overlayColor = '#3b82f6';
-            overlayOpacity = 0.45;
+            overlayOpacity = 0.35;
           } else if (resolvedAreaType === 'road') {
             lineColor = '#fbbf24';
             overlayColor = '#fbbf24';
-            overlayOpacity = 0.35;
+            overlayOpacity = 0.25;
           }
+
+          const shouldShowOutline = isOpen || isDrawingArea;
 
           return (
             <React.Fragment key={h.id}>
-              {/* 1. Draw Area Overlay (Purple/Blue/Yellow semi-transparent shape on hover for Building/Land only) */}
-              {hasPolygon && isOpen && resolvedAreaType !== 'road' && resolvedAreaType !== 'river' && (() => {
+              {/* 1. Draw Area Overlay (Clean semi-transparent shape on hover for Building/Land only) */}
+              {hasPolygon && shouldShowOutline && resolvedAreaType !== 'road' && resolvedAreaType !== 'river' && (() => {
                 const meshData = getPolygonMesh(h.polygonPoints!);
                 if (!meshData) return null;
                 return (
@@ -791,13 +845,14 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                       transparent={true}
                       side={THREE.DoubleSide}
                       depthTest={false}
+                      depthWrite={false}
                     />
                   </mesh>
                 );
               })()}
 
-              {/* 2. Draw Area Outline Line */}
-              {hasPolygon && (
+              {/* 2. Draw Area Outline Line (Shows only on hover or when editing) */}
+              {hasPolygon && shouldShowOutline && (
                 <Line
                   points={(resolvedAreaType === 'road' || resolvedAreaType === 'river') ? h.polygonPoints! : [...h.polygonPoints!, h.polygonPoints![0]]}
                   color={lineColor}
@@ -806,8 +861,8 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                 />
               )}
 
-              {/* 2b. If Road, render directional arrows along the path */}
-              {resolvedAreaType === 'road' && h.polygonPoints && h.polygonPoints.length > 1 && (
+              {/* 2b. If Road, render directional arrows along the path on hover */}
+              {resolvedAreaType === 'road' && shouldShowOutline && h.polygonPoints && h.polygonPoints.length > 1 && (
                 <group>
                   {h.polygonPoints.slice(0, -1).map((pt, idx) => (
                     <RoadArrowHelper
@@ -833,7 +888,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                       contextMenuId={contextMenuId}
                       setContextMenuId={setContextMenuId}
                       isOpen={isOpen}
-                      hasDetails={!!hasDetails}
+                      hasDetails={hasDetails}
                       setActiveInfoId={setActiveInfoId}
                       onEditHotspot={onEditHotspot}
                       onDeleteHotspot={onDeleteHotspot}
@@ -844,7 +899,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                 }
 
                 return (
-                  <Html position={h.position} center zIndexRange={[0, 50]}>
+                  <Html position={h.position} center zIndexRange={[10, 50]}>
                     <div
                       style={{
                         position: 'relative',
@@ -854,8 +909,8 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                         transform: 'translateY(-50%) translateY(8px)',
                         pointerEvents: 'auto'
                       }}
-                      onMouseEnter={() => { if (hasDetails && contextMenuId !== h.id) setActiveInfoId(h.id); }}
-                      onMouseLeave={() => { if (hasDetails) setActiveInfoId(null); }}
+                      onMouseEnter={() => { if (contextMenuId !== h.id) setActiveInfoId(h.id); }}
+                      onMouseLeave={() => { setActiveInfoId(null); }}
                     >
                       {/* Context Menu (Above Pin) */}
                       {contextMenuId === h.id && (
@@ -870,7 +925,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                           padding: '4px',
                           minWidth: '110px',
                           boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-                          zIndex: 110,
+                          zIndex: 99999,
                           pointerEvents: 'auto',
                           display: 'flex',
                           flexDirection: 'column',
@@ -951,36 +1006,124 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                         </div>
                       )}
 
-                      {/* Details Card (Above Pin) */}
+                      {/* Details Card (Popup on Hover with Top z-index & Smart Positioning) */}
                       {hasDetails && isOpen && (
-                        <div style={{
-                          position: 'absolute',
-                          bottom: 'calc(100% + 10px)',
-                          left: '50%',
-                          transform: 'translateX(-50%)',
-                          background: 'rgba(15, 17, 26, 0.95)',
-                          backdropFilter: 'blur(8px)',
-                          border: '1px solid #1f2330',
-                          borderRadius: '8px',
-                          padding: '12px 16px',
-                          width: '240px',
-                          color: 'white',
-                          boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
-                          zIndex: 100,
-                          pointerEvents: 'auto'
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#a5b4fc' }}>{h.name}</span>
+                        <div
+                          style={{
+                            position: 'absolute',
+                            ...(h.position[1] > 20
+                              ? { top: 'calc(100% + 14px)' }
+                              : { bottom: 'calc(100% + 14px)' }),
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            background: 'rgba(9, 13, 24, 0.96)',
+                            backdropFilter: 'blur(24px)',
+                            WebkitBackdropFilter: 'blur(24px)',
+                            border: `1px solid ${h.beaconColor ? `${h.beaconColor}99` : 'rgba(99, 102, 241, 0.5)'}`,
+                            borderRadius: '14px',
+                            padding: '12px 16px',
+                            width: '290px',
+                            maxWidth: '85vw',
+                            color: '#ffffff',
+                            boxShadow: `0 25px 60px rgba(0,0,0,0.9), 0 0 25px ${h.beaconColor ? `${h.beaconColor}44` : 'rgba(99, 102, 241, 0.3)'}`,
+                            zIndex: 99999,
+                            pointerEvents: 'auto',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px'
+                          }}
+                        >
+                          {/* Card Top Title Row */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div
+                                style={{
+                                  width: '22px',
+                                  height: '22px',
+                                  borderRadius: '6px',
+                                  background: h.beaconColor ? `${h.beaconColor}33` : 'rgba(99, 102, 241, 0.2)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: h.beaconColor || '#a5b4fc',
+                                  flexShrink: 0
+                                }}
+                              >
+                                {renderHotspotIcon(h.icon, h.customIconUrl, 14)}
+                              </div>
+                              <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#ffffff' }}>{h.name}</span>
+                            </div>
+                            {h.subtitle && (
+                              <span
+                                style={{
+                                  fontSize: '0.66rem',
+                                  fontWeight: 600,
+                                  color: h.beaconColor || '#a5b4fc',
+                                  background: h.beaconColor ? `${h.beaconColor}22` : 'rgba(99, 102, 241, 0.15)',
+                                  border: `1px solid ${h.beaconColor ? `${h.beaconColor}55` : 'rgba(99, 102, 241, 0.3)'}`,
+                                  padding: '1px 7px',
+                                  borderRadius: '10px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                {h.subtitle}
+                              </span>
+                            )}
                           </div>
+
+                          {/* Area Tag if present */}
                           {h.area && (
-                            <div style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 'bold', marginBottom: '6px' }}>
-                              📐 Area: {h.area}
+                            <div style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span>📐 Area:</span>
+                              <span style={{ color: '#fde68a' }}>{h.area}</span>
                             </div>
                           )}
+
+                          {/* Description content */}
                           {h.description && (
-                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', lineHeight: '1.4', wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                            <div
+                              style={{
+                                fontSize: '0.74rem',
+                                color: '#cbd5e1',
+                                lineHeight: '1.45',
+                                wordBreak: 'break-word',
+                                whiteSpace: 'normal',
+                                maxHeight: '140px',
+                                overflowY: 'auto'
+                              }}
+                            >
                               {h.description}
                             </div>
+                          )}
+
+                          {/* Target room action if linked */}
+                          {h.targetLocationId && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onNavigate(h.targetLocationId!, h.position);
+                              }}
+                              style={{
+                                marginTop: '4px',
+                                width: '100%',
+                                padding: '6px 10px',
+                                borderRadius: '8px',
+                                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                                border: 'none',
+                                color: '#ffffff',
+                                fontWeight: 600,
+                                fontSize: '0.72rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)'
+                              }}
+                            >
+                              <span>Explore Location</span>
+                              <ChevronRight size={13} />
+                            </button>
                           )}
                         </div>
                       )}
@@ -1072,52 +1215,40 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                       {/* 2. Vertical Glowing Laser Pin extending down */}
                       <div
                         style={{
-                          width: '2px',
-                          height: '36px',
-                          background: `linear-gradient(to bottom, ${h.beaconColor || '#a5b4fc'}, rgba(255, 255, 255, 0.8), transparent)`,
-                          boxShadow: `0 0 10px ${h.beaconColor || '#6366f1'}`,
+                          width: '1.5px',
+                          height: '28px',
+                          background: `linear-gradient(to bottom, ${h.beaconColor || '#a5b4fc'}, rgba(255, 255, 255, 0.95), ${h.beaconColor || '#6366f1'})`,
+                          boxShadow: `0 0 8px ${h.beaconColor || '#6366f1'}, 0 0 2px #ffffff`,
                           position: 'relative'
                         }}
-                      >
-                        {/* Center glowing bead */}
-                        <div
-                          style={{
-                            position: 'absolute',
-                            top: '50%',
-                            left: '50%',
-                            transform: 'translate(-50%, -50%)',
-                            width: '6px',
-                            height: '6px',
-                            borderRadius: '50%',
-                            background: '#ffffff',
-                            boxShadow: `0 0 12px 3px ${h.beaconColor || '#818cf8'}`
-                          }}
-                        />
-                      </div>
+                      />
 
-                      {/* 3. Concentric Pulsing Ground Beacon Ring on Terrain */}
+                      {/* 3. High-Tech Concentric Ground Beacon Ring on Terrain */}
                       <div
                         style={{
                           position: 'relative',
-                          width: '28px',
-                          height: '14px',
+                          width: '26px',
+                          height: '12px',
                           borderRadius: '50%',
-                          background: h.beaconColor ? `${h.beaconColor}44` : 'rgba(99, 102, 241, 0.35)',
+                          background: h.beaconColor
+                            ? `radial-gradient(ellipse at center, ${h.beaconColor}55 0%, ${h.beaconColor}15 60%, transparent 80%)`
+                            : 'radial-gradient(ellipse at center, rgba(99, 102, 241, 0.5) 0%, rgba(99, 102, 241, 0.15) 60%, transparent 80%)',
                           border: `1.5px solid ${h.beaconColor || '#a5b4fc'}`,
-                          boxShadow: `0 0 16px ${h.beaconColor || '#6366f1'}`,
+                          boxShadow: `0 0 16px 2px ${h.beaconColor || '#6366f1'}, inset 0 0 8px ${h.beaconColor || '#6366f1'}`,
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center'
+                          justifyContent: 'center',
+                          marginTop: '-1px'
                         }}
                       >
-                        {/* Ground Pin Core Dot */}
+                        {/* Ground Laser Anchor Core Spark */}
                         <div
                           style={{
-                            width: '8px',
+                            width: '4px',
                             height: '4px',
                             borderRadius: '50%',
                             background: '#ffffff',
-                            boxShadow: '0 0 8px #ffffff'
+                            boxShadow: `0 0 8px 2px #ffffff, 0 0 12px 4px ${h.beaconColor || '#818cf8'}`
                           }}
                         />
                       </div>
@@ -1269,7 +1400,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
   };
 
   const [isPreloading, setIsPreloading] = useState<boolean>(true);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState<boolean>(false);
+  const [loadProgress, setLoadProgress] = useState<number>(0);
 
   // Extract all texture URLs to preload before showing 360 viewer
   const allImageUrls = React.useMemo(() => {
@@ -1301,12 +1432,14 @@ export const Viewer360: React.FC<Viewer360Props> = ({
 
   React.useEffect(() => {
     let isMounted = true;
-    if (allImageUrls.length === 0 || hasLoadedOnce) {
+    if (allImageUrls.length === 0) {
       setIsPreloading(false);
+      setLoadProgress(100);
       return;
     }
 
     setIsPreloading(true);
+    setLoadProgress(15);
     setImageMissingError(false);
 
     let loadedCount = 0;
@@ -1320,11 +1453,14 @@ export const Viewer360: React.FC<Viewer360Props> = ({
         () => {
           if (!isMounted) return;
           loadedCount++;
+          const pct = Math.min(100, Math.round((loadedCount / totalCount) * 100));
+          setLoadProgress(pct);
           if (loadedCount >= totalCount) {
-            if (isMounted) {
-              setIsPreloading(false);
-              setHasLoadedOnce(true);
-            }
+            setTimeout(() => {
+              if (isMounted) {
+                setIsPreloading(false);
+              }
+            }, 250);
           }
         },
         undefined,
@@ -1332,23 +1468,26 @@ export const Viewer360: React.FC<Viewer360Props> = ({
           if (!isMounted) return;
           failedCount++;
           loadedCount++;
+          const pct = Math.min(100, Math.round((loadedCount / totalCount) * 100));
+          setLoadProgress(pct);
           if (failedCount >= totalCount && totalCount > 0) {
             if (isMounted) {
               setIsPreloading(false);
               setImageMissingError(true);
             }
           } else if (loadedCount >= totalCount) {
-            if (isMounted) {
-              setIsPreloading(false);
-              setHasLoadedOnce(true);
-            }
+            setTimeout(() => {
+              if (isMounted) {
+                setIsPreloading(false);
+              }
+            }, 250);
           }
         }
       );
     });
 
     return () => { isMounted = false; };
-  }, [allImageUrls, hasLoadedOnce]);
+  }, [allImageUrls]);
 
   // Auto redirect to Home countdown if images are missing from S3
   React.useEffect(() => {
@@ -1449,6 +1588,108 @@ export const Viewer360: React.FC<Viewer360Props> = ({
           }`}
       />
 
+      {/* 360 Panorama Texture Loading & Blur Overlay */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 9999,
+          background: 'radial-gradient(ellipse at center, rgba(13, 18, 43, 0.88) 0%, rgba(6, 8, 19, 0.96) 100%)',
+          backdropFilter: isPreloading ? 'blur(28px)' : 'blur(0px)',
+          WebkitBackdropFilter: isPreloading ? 'blur(28px)' : 'blur(0px)',
+          opacity: isPreloading ? 1 : 0,
+          pointerEvents: isPreloading ? 'all' : 'none',
+          transition: 'opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), backdrop-filter 0.4s ease',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#ffffff'
+        }}
+      >
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '16px',
+          animation: 'modalSlideIn 0.3s ease',
+          transform: isPreloading ? 'scale(1)' : 'scale(0.95)',
+          transition: 'transform 0.4s ease'
+        }}>
+          {/* Animated Glowing Ring & Compass Icon */}
+          <div style={{ position: 'relative', width: '76px', height: '76px' }}>
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.45), rgba(168, 85, 247, 0.45))',
+              filter: 'blur(14px)',
+              animation: 'pulse 2s infinite'
+            }} />
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: '50%',
+              border: '3px solid rgba(99, 102, 241, 0.2)',
+              borderTopColor: '#818cf8',
+              borderRightColor: '#c084fc',
+              animation: 'spin 1.2s linear infinite'
+            }} />
+            <div style={{
+              position: 'absolute',
+              inset: '6px',
+              borderRadius: '50%',
+              background: '#0d122b',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#818cf8',
+              boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.6)'
+            }}>
+              <Compass size={30} className="spin" style={{ animationDuration: '6s' }} />
+            </div>
+          </div>
+
+          {/* Loading Text & Status */}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{
+              fontSize: '1.05rem',
+              fontWeight: 800,
+              letterSpacing: '0.04em',
+              background: 'linear-gradient(135deg, #ffffff 40%, #c7d2fe 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              marginBottom: '4px'
+            }}>
+              Loading 360° Panorama
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+              Streaming high-resolution textures ({loadProgress}%)
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div style={{
+            width: '190px',
+            height: '5px',
+            borderRadius: '999px',
+            background: 'rgba(255, 255, 255, 0.08)',
+            overflow: 'hidden',
+            border: '1px solid rgba(255, 255, 255, 0.06)'
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${loadProgress}%`,
+              background: 'linear-gradient(90deg, #6366f1, #a855f7)',
+              borderRadius: '999px',
+              transition: 'width 0.25s ease',
+              boxShadow: '0 0 12px rgba(99, 102, 241, 0.8)'
+            }} />
+          </div>
+        </div>
+      </div>
+
       {/* S3 Missing Image Fallback Error Overlay */}
       {imageMissingError && (
         <div style={{
@@ -1511,13 +1752,6 @@ export const Viewer360: React.FC<Viewer360Props> = ({
         </div>
       )}
 
-      {/* Loading Spinners */}
-      {isPreloading && !imageMissingError && (
-        <div className="absolute inset-0 z-50 bg-[#07080f]/90 backdrop-blur-md flex items-center justify-center pointer-events-none transition-opacity duration-300">
-          <div className="w-10 h-10 border-3 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-        </div>
-      )}
-
       <Canvas camera={{ position: [0, 0, -0.01], fov: 75 }}>
         <CameraZoomEffect isZooming={isZooming} targetPos={zoomTargetPos} controlsRef={controlsRef} />
         <ambientLight intensity={1.5} />
@@ -1540,6 +1774,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
           onDeleteHotspot={onDeleteHotspot}
           onAddAreaOutline={onAddAreaOutline}
           areaType={areaType}
+          isPreloading={isPreloading}
         />
         <OrbitControls
           ref={controlsRef}
@@ -1645,7 +1880,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
           </>
         )}
 
-        <button className="btn btn-sm" onClick={() => setAutoRotate(!autoRotate)}>
+        {/* <button className="btn btn-sm" onClick={() => setAutoRotate(!autoRotate)}>
           {autoRotate ? <Pause size={16} /> : <Play size={16} />}
         </button>
         <button className="btn btn-sm" onClick={handleZoomIn}>
@@ -1656,7 +1891,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
         </button>
         <button className="btn btn-sm" onClick={toggleFullscreen}>
           <Maximize2 size={16} />
-        </button>
+        </button> */}
       </div>
 
       {isPlacingHotspot && (
@@ -1682,46 +1917,6 @@ export const Viewer360: React.FC<Viewer360Props> = ({
           )}
         </div>
       )}
-
-      {/* Compass HUD */}
-      <div style={{
-        position: 'absolute',
-        top: '24px',
-        right: '24px',
-        background: 'rgba(19, 21, 27, 0.85)',
-        backdropFilter: 'blur(8px)',
-        border: '1px solid var(--border-color)',
-        padding: '10px',
-        borderRadius: '50%',
-        zIndex: 10
-      }}>
-        <div
-          ref={compassContainerRef}
-          style={{
-            transition: 'transform 0.05s linear',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-        >
-          <Compass size={24} style={{ color: 'var(--accent-color)' }} />
-        </div>
-      </div>
-
-      <div style={{
-        position: 'absolute',
-        top: '24px',
-        left: '24px',
-        background: 'rgba(19, 21, 27, 0.85)',
-        backdropFilter: 'blur(8px)',
-        border: '1px solid var(--border-color)',
-        padding: '6px 12px',
-        borderRadius: '6px',
-        fontSize: '0.8rem',
-        zIndex: 10
-      }}>
-        Heading: <span ref={headingTextRef} style={{ fontWeight: 'bold' }}>0°</span>
-      </div>
     </div>
   );
 };

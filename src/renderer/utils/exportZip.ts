@@ -323,18 +323,16 @@ export async function exportProjectToZip(
     }
     .hotspot-wrapper:hover .hotspot-tag { transform: scale(1.05); border-color: #a855f7; box-shadow: 0 0 20px rgba(168, 85, 247, 0.5); }
     .hotspot-beacon-line {
-      width: 2px; height: 32px; background: linear-gradient(to bottom, #a5b4fc, rgba(255, 255, 255, 0.8), transparent);
-      box-shadow: 0 0 8px #6366f1; position: relative;
-    }
-    .hotspot-beacon-dot {
-      width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 10px #818cf8;
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 1.5px; height: 28px; background: linear-gradient(to bottom, #a5b4fc, rgba(255, 255, 255, 0.95), #6366f1);
+      box-shadow: 0 0 8px #6366f1, 0 0 2px #ffffff; position: relative;
     }
     .hotspot-ground-ring {
-      width: 24px; height: 12px; border-radius: 50%; background: rgba(99, 102, 241, 0.35);
-      border: 1.5px solid #a5b4fc; box-shadow: 0 0 12px #6366f1; display: flex; align-items: center; justify-content: center;
+      width: 26px; height: 12px; border-radius: 50%;
+      background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.5) 0%, rgba(99, 102, 241, 0.15) 60%, transparent 80%);
+      border: 1.5px solid #a5b4fc; box-shadow: 0 0 16px 2px #6366f1, inset 0 0 8px #6366f1;
+      display: flex; align-items: center; justify-content: center; margin-top: -1px;
     }
-    .hotspot-ground-core { width: 6px; height: 3px; border-radius: 50%; background: #fff; box-shadow: 0 0 6px #fff; }
+    .hotspot-ground-core { width: 4px; height: 4px; border-radius: 50%; background: #ffffff; box-shadow: 0 0 8px 2px #ffffff, 0 0 12px 4px #818cf8; }
 
     /* Hotspot Details Card (Hover Popup) */
     .hotspot-card {
@@ -761,7 +759,6 @@ export async function exportProjectToZip(
 
         const beaconLine = document.createElement('div');
         beaconLine.className = 'hotspot-beacon-line';
-        beaconLine.innerHTML = '<div class="hotspot-beacon-dot"></div>';
 
         const groundRing = document.createElement('div');
         groundRing.className = 'hotspot-ground-ring';

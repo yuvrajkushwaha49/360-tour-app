@@ -2,32 +2,27 @@ import React, { useState, useEffect } from 'react';
 import {
   Compass,
   Share2,
-  ExternalLink,
   Lock,
   Globe,
   Trash2,
   Eye,
   PlusCircle,
   Search,
-  Check,
-  Building2,
   Layers,
   UserCheck,
-  Sparkles,
-  ShieldCheck,
   ArrowLeft,
   Users,
   UserPlus,
   Mail,
-  Shield,
   Crown,
   Edit3,
   X,
   Archive
 } from 'lucide-react';
 import { exportProjectToZip } from '../utils/exportZip';
-import { API_BASE_URL } from '../utils/apiConfig';
+import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
 import { loadLargeDraft, deleteLargeDraft } from '../utils/dbStorage';
+import EditUserModal from './EditUserModal';
 
 interface ProjectItem {
   id: string;
@@ -68,6 +63,7 @@ interface UserItem {
   name: string;
   email: string;
   role: string;
+  logo_url?: string;
 }
 
 interface ClientDashboardProps {
@@ -97,7 +93,7 @@ export default function ClientDashboard({
   const [usersLoading, setUsersLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [userSearchQuery, setUserSearchQuery] = useState<string>('');
-  const [filterTab, setFilterTab] = useState<'all' | 'public' | 'private'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'public' | 'private' | 'completed' | 'draft'>('all');
   const [activeDashboardTab, setActiveDashboardTab] = useState<'projects' | 'users'>('projects');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +101,7 @@ export default function ClientDashboard({
 
   // Edit Project Modal States (Admin Only)
   const [editingProject, setEditingProject] = useState<ProjectItem | null>(null);
+  const [editingUser, setEditingUser] = useState<UserItem | null>(null);
   const [editName, setEditName] = useState<string>('');
   const [editDescription, setEditDescription] = useState<string>('');
   const [editTargetUserId, setEditTargetUserId] = useState<string>('');
@@ -135,6 +132,13 @@ export default function ClientDashboard({
   useEffect(() => {
     fetchProjects();
     fetchUsers();
+
+    const handleRefreshUsers = () => {
+      fetchUsers();
+    };
+
+    window.addEventListener('refresh-crm-users', handleRefreshUsers);
+    return () => window.removeEventListener('refresh-crm-users', handleRefreshUsers);
   }, [token]);
 
   const fetchProjects = async () => {
@@ -142,9 +146,11 @@ export default function ClientDashboard({
     setError(null);
     let serverProjects: ProjectItem[] = [];
 
+    const activeToken = token || localStorage.getItem('crm_token');
+
     try {
       const response = await fetch(`${API_BASE_URL}/api/projects`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}) }
       });
       if (response.status === 401 || response.status === 403) {
         if (onLogout) {
@@ -165,7 +171,7 @@ export default function ClientDashboard({
       try {
         const localStr = localStorage.getItem('local_saved_projects');
         if (localStr) localList = JSON.parse(localStr);
-      } catch (e) {}
+      } catch (e) { }
 
       // Check for current in-progress unsaved Studio Draft
       try {
@@ -190,7 +196,7 @@ export default function ClientDashboard({
             localList.unshift(draftProject);
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const combined = [...serverProjects];
@@ -209,9 +215,11 @@ export default function ClientDashboard({
 
   const fetchUsers = async () => {
     setUsersLoading(true);
+    const activeToken = token || localStorage.getItem('crm_token');
+
     try {
       const response = await fetch(`${API_BASE_URL}/api/users`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}) }
       });
       if (response.ok) {
         const data = await response.json();
@@ -340,7 +348,7 @@ export default function ClientDashboard({
         await deleteLargeDraft('studio_draft_project');
         localStorage.removeItem('studio_draft_project');
         window.dispatchEvent(new CustomEvent('clear-studio-draft'));
-      } catch (e) {}
+      } catch (e) { }
     } else {
       try {
         await fetch(`${API_BASE_URL}/api/projects/${id}`, {
@@ -359,7 +367,7 @@ export default function ClientDashboard({
         const list = JSON.parse(localStr).filter((p: any) => p.id !== id);
         localStorage.setItem('local_saved_projects', JSON.stringify(list));
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Show beautiful Toast notification
     setToast({
@@ -386,7 +394,7 @@ export default function ClientDashboard({
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.client_name && p.client_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (p.data?.description && p.data.description.toLowerCase().includes(searchQuery.toLowerCase()));
-    
+
     if (filterTab === 'completed') return matchesSearch && isProjectCompleted(p);
     if (filterTab === 'draft') return matchesSearch && !isProjectCompleted(p);
     if (filterTab === 'public') return matchesSearch && p.is_public;
@@ -459,15 +467,6 @@ export default function ClientDashboard({
                 </button>
               )}
 
-              {onOpenAddUserModal && (
-                <button
-                  onClick={onOpenAddUserModal}
-                  className="btn btn-warning text-dark font-weight-normal rounded-3 px-4 py-2.5 small d-flex align-items-center gap-2 shadow-sm"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>+ Create Client / User</span>
-                </button>
-              )}
 
               {onCreateNewProject && (
                 <button
@@ -496,7 +495,7 @@ export default function ClientDashboard({
                 <span className="small text-secondary font-weight-normal text-uppercase tracking-wider d-block mb-1">Total Tours</span>
                 <span className="h3 font-weight-normal text-white mb-0">{projects.length}</span>
               </div>
-              <div className="kpi-icon-box bg-primary bg-opacity-20 text-primary border border-primary border-opacity-30">
+              <div className="kpi-icon-box bg-opacity-20 text-primary border border-primary border-opacity-30">
                 <Compass className="w-6 h-6" />
               </div>
             </div>
@@ -511,7 +510,7 @@ export default function ClientDashboard({
                 <span className="small text-secondary font-weight-normal text-uppercase tracking-wider d-block mb-1">Total Users</span>
                 <span className="h3 font-weight-normal text-warning mb-0">{usersList.length}</span>
               </div>
-              <div className="kpi-icon-box bg-warning bg-opacity-20 text-warning border border-warning border-opacity-30">
+              <div className="kpi-icon-box bg-opacity-20 text-warning border border-warning border-opacity-30">
                 <Users className="w-6 h-6" />
               </div>
             </div>
@@ -523,7 +522,7 @@ export default function ClientDashboard({
                 <span className="small text-secondary font-weight-normal text-uppercase tracking-wider d-block mb-1">Public Tours</span>
                 <span className="h3 font-weight-normal text-success mb-0">{projects.filter(p => p.is_public).length}</span>
               </div>
-              <div className="kpi-icon-box bg-success bg-opacity-20 text-success border border-success border-opacity-30">
+              <div className="kpi-icon-box opacity-20 text-success border border-success border-opacity-30">
                 <Globe className="w-6 h-6" />
               </div>
             </div>
@@ -535,7 +534,7 @@ export default function ClientDashboard({
                 <span className="small text-secondary font-weight-normal text-uppercase tracking-wider d-block mb-1">Private Tours</span>
                 <span className="h3 font-weight-normal text-warning mb-0">{projects.filter(p => !p.is_public).length}</span>
               </div>
-              <div className="kpi-icon-box bg-warning bg-opacity-20 text-warning border border-warning border-opacity-30">
+              <div className="kpi-icon-box bg-opacity-20 text-warning border border-warning border-opacity-30">
                 <Lock className="w-6 h-6" />
               </div>
             </div>
@@ -547,7 +546,7 @@ export default function ClientDashboard({
                 <span className="small text-secondary font-weight-normal text-uppercase tracking-wider d-block mb-1">360° Rooms</span>
                 <span className="h3 font-weight-normal text-info mb-0">{totalRooms}</span>
               </div>
-              <div className="kpi-icon-box bg-info bg-opacity-20 text-info border border-info border-opacity-30">
+              <div className="kpi-icon-box opacity-20 text-info border border-info border-opacity-30">
                 <Layers className="w-6 h-6" />
               </div>
             </div>
@@ -560,9 +559,8 @@ export default function ClientDashboard({
         <div className="d-flex align-items-center gap-2">
           <button
             onClick={() => setActiveDashboardTab('projects')}
-            className={`nav-tab-btn d-flex align-items-center gap-2 ${
-              activeDashboardTab === 'projects' ? 'active-tab-projects' : 'btn-outline-secondary text-secondary'
-            }`}
+            className={`nav-tab-btn d-flex align-items-center gap-2 ${activeDashboardTab === 'projects' ? 'active-tab-projects' : 'btn-outline-secondary text-secondary'
+              }`}
           >
             <Compass className="w-4 h-4" />
             <span>All 360° Projects ({projects.length})</span>
@@ -571,9 +569,8 @@ export default function ClientDashboard({
           {user.role === 'admin' && (
             <button
               onClick={() => setActiveDashboardTab('users')}
-              className={`nav-tab-btn d-flex align-items-center gap-2 ${
-                activeDashboardTab === 'users' ? 'active-tab-users' : 'btn-outline-secondary text-secondary'
-              }`}
+              className={`nav-tab-btn d-flex align-items-center gap-2 ${activeDashboardTab === 'users' ? 'active-tab-users' : 'btn-outline-secondary text-secondary'
+                }`}
             >
               <Users className="w-4 h-4" />
               <span>All Registered Users ({usersList.length})</span>
@@ -636,8 +633,19 @@ export default function ClientDashboard({
                       <div>
                         <div className="d-flex align-items-center justify-content-between mb-3">
                           <div className="d-flex align-items-center gap-3">
-                            <div className={`user-avatar ${isAdmin ? 'bg-warning text-dark' : 'bg-primary text-white'}`}>
-                              {usr.name.charAt(0).toUpperCase()}
+                            <div
+                              className={`user-avatar ${isAdmin ? 'bg-warning text-dark' : 'bg-primary text-white'}`}
+                              style={{ overflow: 'hidden', padding: 0 }}
+                            >
+                              {usr.logo_url ? (
+                                <img
+                                  src={toCloudFrontUrl(usr.logo_url)}
+                                  alt={usr.name}
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                              ) : (
+                                usr.name.charAt(0).toUpperCase()
+                              )}
                             </div>
                             <div>
                               <h3 className="h6 font-weight-normal text-white mb-0">{usr.name}</h3>
@@ -645,17 +653,30 @@ export default function ClientDashboard({
                             </div>
                           </div>
 
-                          {isAdmin ? (
-                            <span className="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-25 px-2.5 py-1.5 rounded-pill small font-weight-normal">
-                              <Crown className="w-3.5 h-3.5 me-1" />
-                              <span>Admin</span>
-                            </span>
-                          ) : (
-                            <span className="badge bg-primary bg-opacity-25 text-primary border border-primary border-opacity-25 px-2.5 py-1.5 rounded-pill small font-weight-normal">
-                              <UserCheck className="w-3.5 h-3.5 me-1" />
-                              <span>Client</span>
-                            </span>
-                          )}
+                          <div className="d-flex align-items-center gap-2">
+                            {isAdmin ? (
+                              <span className="badge bg-opacity-25 text-warning border border-warning border-opacity-25 px-2.5 py-1.5 rounded-pill small font-weight-normal">
+                                <Crown className="w-3.5 h-3.5 me-1" />
+                                <span>Admin</span>
+                              </span>
+                            ) : (
+                              <span className="badge bg-primary bg-opacity-25 text-primary border border-primary border-opacity-25 px-2.5 py-1.5 rounded-pill small font-weight-normal">
+                                <UserCheck className="w-3.5 h-3.5 me-1" />
+                                <span>Client</span>
+                              </span>
+                            )}
+
+                            {user.role === 'admin' && (
+                              <button
+                                onClick={() => setEditingUser(usr)}
+                                className="btn btn-sm btn-outline-secondary text-secondary p-1 rounded-2 border-0"
+                                title="Edit Client Details & Brand Logo"
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <Edit3 className="w-4 h-4 text-info" />
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         <div className="bg-dark bg-opacity-60 p-3 rounded-3 border border-secondary border-opacity-25 mb-3">
@@ -665,7 +686,7 @@ export default function ClientDashboard({
                           </div>
                           <div className="d-flex align-items-center justify-content-between small pt-2 border-top border-secondary border-opacity-25">
                             <span className="text-secondary font-weight-normal">Assigned Tours:</span>
-                            <span className="badge bg-warning bg-opacity-20 text-warning border border-warning border-opacity-30 font-weight-normal">
+                            <span className="badge   bg-opacity-20 text-warning border border-warning border-opacity-30 font-weight-normal">
                               {assignedCount} Project{assignedCount !== 1 ? 's' : ''}
                             </span>
                           </div>
@@ -784,7 +805,7 @@ export default function ClientDashboard({
                         {/* Card Header / Preview */}
                         <div className="project-card-header">
                           <div className="text-center position-relative z-1">
-                            <div className="kpi-icon-box bg-primary bg-opacity-25 text-primary border border-primary border-opacity-30 mx-auto mb-2 shadow">
+                            <div className="kpi-icon-box bg-opacity-25 text-primary border border-primary border-opacity-30 mx-auto mb-2 shadow">
                               <Compass className="w-7 h-7" />
                             </div>
                             <span className="badge bg-dark bg-opacity-80 text-white border border-secondary border-opacity-25 rounded-pill px-3 py-1.5 small font-weight-normal">
@@ -819,7 +840,7 @@ export default function ClientDashboard({
                                   e.stopPropagation();
                                   if (user.role === 'admin') togglePublic(project);
                                 }}
-                                className="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-30 rounded-pill px-2.5 py-1.5 cursor-pointer text-decoration-none font-weight-normal"
+                                className="badge   bg-opacity-25 text-warning border border-warning border-opacity-30 rounded-pill px-2.5 py-1.5 cursor-pointer text-decoration-none font-weight-normal"
                               >
                                 🔒 Private
                               </button>
@@ -942,7 +963,7 @@ export default function ClientDashboard({
             ></button>
 
             <div className="d-flex align-items-center gap-3 mb-4">
-              <div className="kpi-icon-box bg-primary bg-opacity-25 text-primary border border-primary border-opacity-30">
+              <div className="kpi-icon-box bg-opacity-25 text-primary border border-primary border-opacity-30">
                 <Edit3 className="w-6 h-6" />
               </div>
               <div>
@@ -1024,6 +1045,21 @@ export default function ClientDashboard({
           </div>
         </div>
       )}
+
+      {/* Edit Client / User Details Modal */}
+      <EditUserModal
+        isOpen={!!editingUser}
+        user={editingUser}
+        token={token}
+        onClose={() => setEditingUser(null)}
+        onSuccess={(updated) => {
+          setUsersList(prev => prev.map(u => u.id === updated.id ? { ...u, ...updated } : u));
+          setToast({
+            message: `Updated account details for "${updated.name}"!`,
+            type: 'success'
+          });
+        }}
+      />
       {/* Toast Notification */}
       {toast && (
         <div

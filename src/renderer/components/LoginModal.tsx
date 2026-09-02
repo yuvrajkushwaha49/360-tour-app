@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Lock, Mail, ShieldCheck, LogIn } from 'lucide-react';
+import { X, Lock, Mail, ShieldCheck, LogIn, Eye, EyeOff } from 'lucide-react';
 import { API_BASE_URL } from '../utils/apiConfig';
 
 interface LoginModalProps {
@@ -12,6 +12,7 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
   // Public registration disabled - Only Admin can create client accounts via AddUserModal
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,8 +45,35 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="bg-[#12141d]/90 border border-gray-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl shadow-indigo-950/40 relative">
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 99999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(5, 7, 15, 0.88)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        padding: '16px'
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '460px',
+          backgroundColor: '#12141d',
+          border: '1px solid #1f293d',
+          borderRadius: '24px',
+          overflow: 'hidden',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.85)',
+          position: 'relative',
+          animation: 'modalSlideIn 0.2s ease',
+          color: '#ffffff'
+        }}
+      >
         
         {/* Decorative Top Ambient Glow */}
         <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-600/30 rounded-full blur-3xl pointer-events-none"></div>
@@ -99,13 +127,21 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
             <div className="relative">
               <Lock className="absolute left-3.5 top-3 w-4 h-4 text-gray-500" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 required
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#0b0c12] border border-gray-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                className="w-full bg-[#0b0c12] border border-gray-800 rounded-xl pl-10 pr-10 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-3 text-gray-400 hover:text-white transition-colors focus:outline-none"
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 

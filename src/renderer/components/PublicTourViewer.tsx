@@ -6,7 +6,6 @@ import {
   Check,
   ShieldAlert,
   Compass,
-  Layers,
   Lock,
   ShieldCheck,
   Maximize2,
@@ -24,10 +23,11 @@ import {
   Star,
   ChevronLeft,
   ChevronRight,
-  ZoomIn,
-  ZoomOut,
+  ChevronDown,
   RotateCw,
-  Target
+  Target,
+  Plus,
+  Minus
 } from 'lucide-react';
 import Viewer360 from './Viewer360';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
@@ -42,6 +42,7 @@ interface PublicTourViewerProps {
 export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTourViewerProps) {
   const [tourName, setTourName] = useState<string>('');
   const [tourData, setTourData] = useState<any>(null);
+  const [clientLogo, setClientLogo] = useState<string>('');
   const [activeLocationId, setActiveLocationId] = useState<string>(() => {
     return localStorage.getItem(`active_public_loc_${tourId}`) || '';
   });
@@ -92,6 +93,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
       setTourName(data.name);
       setTourData(data.tourData);
+      const foundLogo = data.clientLogo || data.client_logo || data.tourData?.client_logo || data.tourData?.clientLogo || '';
+      setClientLogo(foundLogo);
 
       const locations = data.tourData?.locations || [];
       if (locations.length > 0) {
@@ -122,9 +125,9 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => { });
     } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => { });
     }
   };
 
@@ -135,12 +138,61 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     }
   };
 
+  const handleZoom = (inOrOut: 'in' | 'out') => {
+    const canvasEl = document.getElementById('viewer-canvas-container');
+    if (canvasEl) {
+      const deltaY = inOrOut === 'in' ? -150 : 150;
+      canvasEl.dispatchEvent(new WheelEvent('wheel', { deltaY, bubbles: true }));
+    }
+  };
+
   if (loading) {
     return (
-      <div className="public-viewer-page d-flex flex-column align-items-center justify-content-center text-white">
-        <div className="spinner-border text-primary mb-3" role="status" style={{ width: '3rem', height: '3rem' }}></div>
-        <h3 className="h5 font-weight-normal tracking-wide">Loading 360° Smart City Virtual Tour...</h3>
-        <p className="small text-secondary mt-1 mb-0">Rendering high-definition panorama projection & 3D beacons</p>
+      <div className="public-viewer-page d-flex flex-column align-items-center justify-content-center text-white" style={{ background: '#050713' }}>
+        <div style={{ position: 'relative', width: '80px', height: '80px', marginBottom: '20px' }}>
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.45), rgba(168, 85, 247, 0.45))',
+            filter: 'blur(16px)',
+            animation: 'pulse 2s infinite'
+          }} />
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: '50%',
+            border: '3px solid rgba(99, 102, 241, 0.2)',
+            borderTopColor: '#818cf8',
+            borderRightColor: '#c084fc',
+            animation: 'spin 1.2s linear infinite'
+          }} />
+          <div style={{
+            position: 'absolute',
+            inset: '8px',
+            borderRadius: '50%',
+            background: '#0d122b',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#818cf8',
+            boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.6)'
+          }}>
+            <Compass size={32} className="spin" style={{ animationDuration: '6s' }} />
+          </div>
+        </div>
+        <h3 style={{
+          fontSize: '1.2rem',
+          fontWeight: 800,
+          background: 'linear-gradient(135deg, #ffffff 40%, #c7d2fe 100%)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          marginBottom: '6px'
+        }}>
+          Loading 360° Virtual Tour
+        </h3>
+        <p className="small text-secondary mt-0 mb-0">Initializing panorama projection & 3D beacons...</p>
       </div>
     );
   }
@@ -149,11 +201,11 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   if (isPrivate || (error && error.toLowerCase().includes('private'))) {
     return (
       <div className="public-viewer-page d-flex flex-column align-items-center justify-content-center text-white p-4 text-center">
-        <div className="p-4 bg-warning bg-opacity-15 border border-warning border-opacity-30 rounded-circle text-warning mb-4 shadow-lg">
+        <div className="p-4   bg-opacity-15 border border-warning border-opacity-30 rounded-circle text-warning mb-4 shadow-lg">
           <Lock size={48} className="text-warning" />
         </div>
 
-        <span className="badge bg-warning bg-opacity-20 text-warning border border-warning border-opacity-30 px-3 py-1.5 rounded-pill uppercase tracking-wider small font-weight-normal mb-3">
+        <span className="badge   bg-opacity-20 text-warning border border-warning border-opacity-30 px-3 py-1.5 rounded-pill uppercase tracking-wider small font-weight-normal mb-3">
           🔒 Private Virtual Tour
         </span>
 
@@ -232,6 +284,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     };
   }
 
+  const displayName = tourName || 'dholera';
+
   return (
     <div className="public-viewer-page">
       {/* Top Glassmorphic Navigation Bar */}
@@ -247,11 +301,38 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
           </button>
 
-          <div className="smart-portal-logo">
-            <span>{tourName || 'DHOLERA'}</span>
-            <span className="smart-portal-tagline">360° MEGA PROJECT VR PORTAL</span>
+          <div className="smart-portal-logo" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
+            {clientLogo && (
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginLeft: '8px',
+                  flexShrink: 0,
+                  boxShadow: '0 4px 14px rgba(0, 0, 0, 0.6)'
+                }}
+              >
+                <img
+                  src={toCloudFrontUrl(clientLogo)}
+                  alt="Client Brand Logo"
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              </div>
+            )}
+            <span style={{ fontSize: '24px', marginLeft: '12px', color: '#ffffff', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', textShadow: '0 0 20px rgba(99, 102, 241, 0.6)' }}>
+              {tourName || 'Smart City'}
+            </span>
           </div>
         </div>
+
+
 
         {/* Center Category Nav Pills */}
         <div className="smart-nav-pills">
@@ -292,35 +373,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           </button>
         </div>
 
-        {/* Right Controls (Time-of-Day, Share, Fullscreen, Back) */}
+        {/* Right Controls (Dropdowns, Time-of-Day, Share, Fullscreen, Back) */}
         <div className="smart-top-right">
-          {/* Time of Day Toggle */}
-          <div className="smart-tod-toggle">
-            <button
-              onClick={() => setTimeOfDay('day')}
-              className={`smart-tod-btn ${timeOfDay === 'day' ? 'active' : ''}`}
-              title="Day Mode"
-            >
-              <Sun size={13} />
-              <span>Day</span>
-            </button>
-            <button
-              onClick={() => setTimeOfDay('sunset')}
-              className={`smart-tod-btn ${timeOfDay === 'sunset' ? 'active-sunset' : ''}`}
-              title="Sunset / Golden Hour Mode"
-            >
-              <Sunset size={13} />
-              <span>Sunset</span>
-            </button>
-            <button
-              onClick={() => setTimeOfDay('night')}
-              className={`smart-tod-btn ${timeOfDay === 'night' ? 'active-night' : ''}`}
-              title="Night / Cyber Mode"
-            >
-              <Moon size={13} />
-              <span>Night</span>
-            </button>
-          </div>
+
+
 
           {/* Share Button */}
           <button
@@ -329,7 +385,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             style={{ width: '2.25rem', height: '2.25rem' }}
             title="Share Tour Link"
           >
-            {copied ? <Check size={16} className="text-emerald-400" /> : <Share2 size={16} />}
+            {copied ? <Check size={15} className="text-emerald-400" /> : <Share2 size={15} />}
           </button>
 
           {/* Fullscreen Toggle */}
@@ -339,7 +395,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             style={{ width: '2.25rem', height: '2.25rem' }}
             title="Toggle Fullscreen"
           >
-            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
 
           {/* Back to Dashboard */}
@@ -349,15 +405,15 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             style={{ width: '2.25rem', height: '2.25rem', color: '#a5b4fc' }}
             title="Back to Dashboard"
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft size={15} />
           </button>
         </div>
       </div>
 
-      {/* Left Collapsible Glassmorphic Sidebar */}
+      {/* Left Collapsible Glassmorphic Sidebar (Fixed to Left Side) */}
       <div className={`smart-portal-sidebar ${sidebarOpen ? 'open' : 'collapsed'}`}>
         <div className="smart-sidebar-title">
-          EXPLORE {tourName ? tourName.toUpperCase() : 'MEGA REGION'}
+          EXPLORE {displayName.toUpperCase()}
         </div>
 
         {/* 360 Aerial View CTA Card */}
@@ -367,28 +423,28 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             if (locations.length > 0) handleLocationChange(locations[0].id);
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Globe size={22} className="text-indigo-400" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Globe size={20} className="text-indigo-400" />
             <div>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#ffffff' }}>360° AERIAL VIEW</div>
-              <div style={{ fontSize: '0.7rem', color: '#cbd5e1' }}>Explore in 360° VR</div>
+              <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#ffffff' }}>360° AERIAL VIEW</div>
+              <div style={{ fontSize: '0.66rem', color: '#cbd5e1' }}>Explore {displayName} in 360°</div>
             </div>
           </div>
-          <ChevronRight size={18} className="text-indigo-400" />
+          <ChevronRight size={16} className="text-indigo-400" />
         </div>
 
         {/* Sidebar Feature Links */}
         <div className="smart-sidebar-menu">
           <div className="smart-menu-item" onClick={() => setActiveNavTab('masterplan')}>
-            <div className="smart-menu-icon"><Map size={16} /></div>
+            <div className="smart-menu-icon"><Map size={15} /></div>
             <div>
               <div className="smart-menu-label">MASTER PLAN</div>
-              <div className="smart-menu-sub">View smart city planning</div>
+              <div className="smart-menu-sub">View city planning</div>
             </div>
           </div>
 
           <div className="smart-menu-item" onClick={() => setActiveNavTab('infrastructure')}>
-            <div className="smart-menu-icon"><Building2 size={16} /></div>
+            <div className="smart-menu-icon"><Building2 size={15} /></div>
             <div>
               <div className="smart-menu-label">INFRASTRUCTURE</div>
               <div className="smart-menu-sub">World class infrastructure</div>
@@ -396,15 +452,23 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           </div>
 
           <div className="smart-menu-item" onClick={() => setActiveNavTab('connectivity')}>
-            <div className="smart-menu-icon"><Network size={16} /></div>
+            <div className="smart-menu-icon"><Network size={15} /></div>
             <div>
               <div className="smart-menu-label">CONNECTIVITY</div>
               <div className="smart-menu-sub">Road • Rail • Air • Sea</div>
             </div>
           </div>
 
+          <div className="smart-menu-item" onClick={() => alert(`${displayName}: The Future Is Here`)}>
+            <div className="smart-menu-icon"><Star size={15} /></div>
+            <div>
+              <div className="smart-menu-label">WHY {displayName.toUpperCase()}?</div>
+              <div className="smart-menu-sub">The future is here</div>
+            </div>
+          </div>
+
           <div className="smart-menu-item" onClick={() => setActiveNavTab('gallery')}>
-            <div className="smart-menu-icon"><Image size={16} /></div>
+            <div className="smart-menu-icon"><Image size={15} /></div>
             <div>
               <div className="smart-menu-label">GALLERY</div>
               <div className="smart-menu-sub">Photos & videos</div>
@@ -412,7 +476,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           </div>
 
           <div className="smart-menu-item" onClick={copyShareLink}>
-            <div className="smart-menu-icon"><FileText size={16} /></div>
+            <div className="smart-menu-icon"><FileText size={15} /></div>
             <div>
               <div className="smart-menu-label">DOWNLOADS</div>
               <div className="smart-menu-sub">Brochures & documents</div>
@@ -422,20 +486,20 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
         {/* Zone Legend */}
         <div className="smart-legend-box">
-          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#f59e0b', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+          <div className="smart-legend-title">
             ZONE LEGEND
           </div>
           <div className="smart-legend-item">
             <span className="smart-legend-dot" style={{ background: '#a855f7', color: '#a855f7' }} />
-            <span>Industrial Zone</span>
+            <span>Industrial</span>
           </div>
           <div className="smart-legend-item">
             <span className="smart-legend-dot" style={{ background: '#eab308', color: '#eab308' }} />
-            <span>Residential Zone</span>
+            <span>Residential</span>
           </div>
           <div className="smart-legend-item">
             <span className="smart-legend-dot" style={{ background: '#3b82f6', color: '#3b82f6' }} />
-            <span>Commercial Zone</span>
+            <span>Commercial</span>
           </div>
           <div className="smart-legend-item">
             <span className="smart-legend-dot" style={{ background: '#f97316', color: '#f97316' }} />
@@ -449,7 +513,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       </div>
 
       {/* 360 Canvas View with 3D Beacons */}
-      <div className="public-viewer-canvas">
+      <div className="public-viewer-canvas" id="viewer-canvas-container">
         <Viewer360
           readOnly={true}
           directions={currentLocation?.directions || { F: [], B: [], L: [], R: [], U: [], D: [] }}
@@ -476,7 +540,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           <div className="smart-carousel-container">
             {locations.length > 4 && (
               <button onClick={() => scrollCarousel('left')} className="smart-carousel-arrow" title="Previous">
-                <ChevronLeft size={18} />
+                <ChevronLeft size={16} />
               </button>
             )}
 
@@ -522,7 +586,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
             {locations.length > 4 && (
               <button onClick={() => scrollCarousel('right')} className="smart-carousel-arrow" title="Next">
-                <ChevronRight size={18} />
+                <ChevronRight size={16} />
               </button>
             )}
           </div>
@@ -532,11 +596,11 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       {/* Bottom Center Floating Toolbar */}
       <div className="smart-bottom-toolbar">
         <button
-          className={`smart-tool-btn ${autoRotate ? 'active-360' : ''}`}
-          onClick={() => setAutoRotate(!autoRotate)}
-          title="Toggle 360° Auto-Rotation"
+          className="smart-tool-btn"
+          onClick={() => handleZoom('out')}
+          title="Zoom Out (-)"
         >
-          <RotateCw size={16} />
+          <Minus size={15} />
         </button>
 
         <button
@@ -550,7 +614,15 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           }}
           title="Reset View"
         >
-          <Target size={16} />
+          <Target size={15} />
+        </button>
+
+        <button
+          className={`smart-tool-btn ${autoRotate ? 'active-360' : ''}`}
+          onClick={() => setAutoRotate(!autoRotate)}
+          title="Toggle 360° Auto-Rotation"
+        >
+          <RotateCw size={15} />
         </button>
 
         <button
@@ -558,12 +630,29 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           onClick={() => setSidebarOpen(!sidebarOpen)}
           title="Toggle Zone & Master Plan"
         >
-          <Map size={16} />
+          <Map size={15} />
+        </button>
+
+        <button
+          className="smart-tool-btn"
+          onClick={() => handleZoom('in')}
+          title="Zoom In (+)"
+        >
+          <Plus size={15} />
         </button>
       </div>
 
-      {/* Bottom Right Realistic 3D Compass */}
+      {/* Bottom Right Realistic 3D Compass & Zoom Controls */}
       <div className="smart-compass-widget">
+        <div className="smart-zoom-controls">
+          <button className="smart-zoom-btn" onClick={() => handleZoom('in')} title="Zoom In">
+            <Plus size={13} />
+          </button>
+          <button className="smart-zoom-btn" onClick={() => handleZoom('out')} title="Zoom Out">
+            <Minus size={13} />
+          </button>
+        </div>
+
         <div
           className="smart-compass-dial"
           onClick={() => {

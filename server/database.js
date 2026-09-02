@@ -20,11 +20,15 @@ function initializeTables() {
         name TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
-        role TEXT DEFAULT 'client'
+        role TEXT DEFAULT 'client',
+        logo_url TEXT
       )
     `, (err) => {
       if (err) console.error('Error creating users table:', err.message);
     });
+
+    // Safely add logo_url column if not present in existing database
+    db.run(`ALTER TABLE users ADD COLUMN logo_url TEXT`, () => {});
 
     // 2. Projects Table
     db.run(`

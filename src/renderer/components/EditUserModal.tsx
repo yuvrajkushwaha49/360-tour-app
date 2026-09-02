@@ -1,18 +1,27 @@
-import React, { useState, useRef } from 'react';
-import { X, UserPlus, Mail, User, Lock, CheckCircle2, Building2, Eye, EyeOff, Sparkles, UploadCloud, ImageIcon, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Edit3, Mail, User, Lock, CheckCircle2, Building2, Sparkles, Eye, EyeOff, UploadCloud, ImageIcon, Trash2 } from 'lucide-react';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
 
-interface AddUserModalProps {
-  isOpen: boolean;
-  token: string | null;
-  onClose: () => void;
-  onSuccess: (newUser: { id: string; name: string; email: string; role: string; logo_url?: string }) => void;
+interface UserItem {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  logo_url?: string;
 }
 
-export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddUserModalProps) {
+interface EditUserModalProps {
+  isOpen: boolean;
+  user: UserItem | null;
+  token: string | null;
+  onClose: () => void;
+  onSuccess: (updatedUser: UserItem) => void;
+}
+
+export default function EditUserModal({ isOpen, user, token, onClose, onSuccess }: EditUserModalProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('123456'); // default initial password
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<'client' | 'admin'>('client');
   const [logoUrl, setLogoUrl] = useState<string>('');
@@ -22,7 +31,18 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (user) {
+      setName(user.name || '');
+      setEmail(user.email || '');
+      setRole((user.role as 'client' | 'admin') || 'client');
+      setLogoUrl(user.logo_url || '');
+      setPassword('');
+      setError(null);
+    }
+  }, [user, isOpen]);
+
+  if (!isOpen || !user) return null;
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -66,36 +86,36 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
     const activeToken = token || localStorage.getItem('crm_token');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/users/add`, {
-        method: 'POST',
+      const payload: any = {
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        role,
+        logo_url: logoUrl || null
+      };
+
+      if (password && password.trim().length > 0) {
+        payload.password = password.trim();
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/users/${user.id}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {})
         },
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim().toLowerCase(),
-          password,
-          role,
-          logo_url: logoUrl || null
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to add new user');
+        throw new Error(data.error || 'Failed to update user profile');
       }
 
       onSuccess(data.user);
       window.dispatchEvent(new CustomEvent('refresh-crm-users'));
       onClose();
-      // Reset form
-      setName('');
-      setEmail('');
-      setPassword('123456');
-      setLogoUrl('');
     } catch (err: any) {
-      setError(err.message || 'Something went wrong');
+      setError(err.message || 'Something went wrong while saving changes.');
     } finally {
       setLoading(false);
     }
@@ -125,7 +145,7 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
           maxHeight: '92vh',
           overflowY: 'auto',
           background: 'linear-gradient(165deg, rgba(17, 22, 42, 0.96) 0%, rgba(10, 13, 26, 0.98) 100%)',
-          border: '1px solid rgba(99, 102, 241, 0.3)',
+          border: '1px solid rgba(139, 92, 246, 0.35)',
           borderRadius: '28px',
           padding: '28px 32px',
           boxShadow: '0 30px 80px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
@@ -142,7 +162,7 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
           width: '200px',
           height: '200px',
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.35) 0%, rgba(99, 102, 241, 0) 70%)',
+          background: 'radial-gradient(circle, rgba(139, 92, 246, 0.35) 0%, rgba(139, 92, 246, 0) 70%)',
           pointerEvents: 'none',
           filter: 'blur(30px)'
         }} />
@@ -153,7 +173,7 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
           width: '180px',
           height: '180px',
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(168, 85, 247, 0.25) 0%, rgba(168, 85, 247, 0) 70%)',
+          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, rgba(99, 102, 241, 0) 70%)',
           pointerEvents: 'none',
           filter: 'blur(30px)'
         }} />
@@ -174,15 +194,15 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
               width: '46px',
               height: '46px',
               borderRadius: '16px',
-              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(139, 92, 246, 0.35) 100%)',
-              border: '1px solid rgba(99, 102, 241, 0.45)',
+              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.25) 0%, rgba(99, 102, 241, 0.35) 100%)',
+              border: '1px solid rgba(139, 92, 246, 0.45)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#818cf8',
-              boxShadow: '0 8px 20px rgba(99, 102, 241, 0.25)'
+              color: '#c084fc',
+              boxShadow: '0 8px 20px rgba(139, 92, 246, 0.25)'
             }}>
-              <UserPlus size={22} />
+              <Edit3 size={22} />
             </div>
             <div>
               <h3 style={{
@@ -190,14 +210,14 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
                 fontSize: '1.2rem',
                 fontWeight: 800,
                 letterSpacing: '-0.02em',
-                background: 'linear-gradient(135deg, #ffffff 40%, #c7d2fe 100%)',
+                background: 'linear-gradient(135deg, #ffffff 40%, #ddd6fe 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent'
               }}>
-                Add New Client Account
+                Edit Client / User Details
               </h3>
               <p style={{ margin: 0, fontSize: '0.78rem', color: '#94a3b8', marginTop: '2px' }}>
-                Create credentials, upload client logo & configure access
+                Update name, email, brand logo, role or password
               </p>
             </div>
           </div>
@@ -279,7 +299,7 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
               gap: '14px',
               padding: '12px 16px',
               background: '#070913',
-              border: '1px dashed rgba(99, 102, 241, 0.35)',
+              border: '1px dashed rgba(139, 92, 246, 0.35)',
               borderRadius: '16px'
             }}>
               {/* Logo Preview Avatar */}
@@ -302,7 +322,13 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
-                  <ImageIcon size={22} color="#64748b" />
+                  <div style={{
+                    fontSize: '1.2rem',
+                    fontWeight: 800,
+                    color: '#c084fc'
+                  }}>
+                    {name ? name.charAt(0).toUpperCase() : <ImageIcon size={22} color="#64748b" />}
+                  </div>
                 )}
               </div>
 
@@ -314,9 +340,9 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploadingLogo}
                     style={{
-                      background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2))',
-                      border: '1px solid rgba(99, 102, 241, 0.4)',
-                      color: '#c7d2fe',
+                      background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(99, 102, 241, 0.2))',
+                      border: '1px solid rgba(139, 92, 246, 0.4)',
+                      color: '#ddd6fe',
                       borderRadius: '10px',
                       padding: '6px 12px',
                       fontSize: '0.78rem',
@@ -355,7 +381,7 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
                   )}
                 </div>
                 <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                  Recommended: PNG or JPG with transparent/square background
+                  PNG or JPG image format supported
                 </span>
               </div>
             </div>
@@ -372,7 +398,7 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
               color: '#94a3b8',
               marginBottom: '6px'
             }}>
-              Client / User Name <span style={{ color: '#818cf8' }}>*</span>
+              Client / User Name <span style={{ color: '#c084fc' }}>*</span>
             </label>
             <div style={{ position: 'relative' }}>
               <div style={{
@@ -405,8 +431,8 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
                   transition: 'all 0.2s ease'
                 }}
                 onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#6366f1';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.2)';
+                  e.currentTarget.style.borderColor = '#8b5cf6';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(139, 92, 246, 0.2)';
                 }}
                 onBlur={(e) => {
                   e.currentTarget.style.borderColor = '#1e2438';
@@ -427,7 +453,7 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
               color: '#94a3b8',
               marginBottom: '6px'
             }}>
-              Email Address <span style={{ color: '#818cf8' }}>*</span>
+              Email Address <span style={{ color: '#c084fc' }}>*</span>
             </label>
             <div style={{ position: 'relative' }}>
               <div style={{
@@ -460,8 +486,8 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
                   transition: 'all 0.2s ease'
                 }}
                 onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#6366f1';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.2)';
+                  e.currentTarget.style.borderColor = '#8b5cf6';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(139, 92, 246, 0.2)';
                 }}
                 onBlur={(e) => {
                   e.currentTarget.style.borderColor = '#1e2438';
@@ -471,7 +497,7 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
             </div>
           </div>
 
-          {/* Initial Password */}
+          {/* Optional New Password */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
               <label style={{
@@ -482,9 +508,9 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
                 color: '#94a3b8',
                 margin: 0
               }}>
-                Initial Password <span style={{ color: '#818cf8' }}>*</span>
+                Update Password (Optional)
               </label>
-              <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Default: 123456</span>
+              <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Leave blank to keep unchanged</span>
             </div>
             <div style={{ position: 'relative' }}>
               <div style={{
@@ -500,8 +526,7 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
               </div>
               <input
                 type={showPassword ? 'text' : 'password'}
-                required
-                placeholder="Initial login password"
+                placeholder="Enter new password to reset"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 style={{
@@ -518,8 +543,8 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
                   transition: 'all 0.2s ease'
                 }}
                 onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#6366f1';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.2)';
+                  e.currentTarget.style.borderColor = '#8b5cf6';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(139, 92, 246, 0.2)';
                 }}
                 onBlur={(e) => {
                   e.currentTarget.style.borderColor = '#1e2438';
@@ -687,8 +712,8 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
                 padding: '10px 24px',
                 borderRadius: '12px',
                 background: loading || isUploadingLogo || !name.trim() || !email.trim()
-                  ? 'rgba(99, 102, 241, 0.3)'
-                  : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
+                  ? 'rgba(139, 92, 246, 0.3)'
+                  : 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 50%, #4f46e5 100%)',
                 border: 'none',
                 color: '#ffffff',
                 fontSize: '0.84rem',
@@ -696,7 +721,7 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
                 cursor: loading || isUploadingLogo || !name.trim() || !email.trim() ? 'not-allowed' : 'pointer',
                 boxShadow: loading || isUploadingLogo || !name.trim() || !email.trim()
                   ? 'none'
-                  : '0 8px 24px rgba(99, 102, 241, 0.45)',
+                  : '0 8px 24px rgba(139, 92, 246, 0.45)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
@@ -706,12 +731,12 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
               onMouseEnter={(e) => {
                 if (!loading && !isUploadingLogo && name.trim() && email.trim()) {
                   e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(99, 102, 241, 0.55)';
+                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(139, 92, 246, 0.55)';
                 }
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 8px 24px rgba(99, 102, 241, 0.45)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.45)';
               }}
             >
               {loading ? (
@@ -724,12 +749,12 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
                     borderRadius: '50%',
                     animation: 'spin 1s linear infinite'
                   }} />
-                  <span>Creating Account...</span>
+                  <span>Saving Changes...</span>
                 </>
               ) : (
                 <>
-                  <UserPlus size={16} />
-                  <span>Create Account</span>
+                  <Edit3 size={16} />
+                  <span>Save Changes</span>
                 </>
               )}
             </button>

@@ -338,7 +338,7 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
 
 // List all users (Admin & Client users)
 app.get('/api/users', authenticateToken, (req, res) => {
-  db.all(`SELECT id, name, email, role FROM users ORDER BY name ASC`, [], (err, rows) => {
+  db.all(`SELECT id, name, email, role, logo_url FROM users ORDER BY name ASC`, [], (err, rows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -348,7 +348,7 @@ app.get('/api/users', authenticateToken, (req, res) => {
 
 // Add a new client / user (Admin endpoint)
 app.post('/api/users/add', authenticateToken, async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, logo_url } = req.body;
 
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email, and password are required.' });
@@ -360,8 +360,8 @@ app.post('/api/users/add', authenticateToken, async (req, res) => {
     const userRole = role === 'admin' ? 'admin' : 'client';
 
     db.run(
-      `INSERT INTO users (id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)`,
-      [userId, name, email, passwordHash, userRole],
+      `INSERT INTO users (id, name, email, password_hash, role, logo_url) VALUES (?, ?, ?, ?, ?, ?)`,
+      [userId, name, email, passwordHash, userRole, logo_url || null],
       function (err) {
         if (err) {
           if (err.message.includes('UNIQUE constraint failed')) {
@@ -372,10 +372,67 @@ app.post('/api/users/add', authenticateToken, async (req, res) => {
         
         res.status(201).json({
           message: 'Client account created successfully.',
-          user: { id: userId, name, email, role: userRole }
+          user: { id: userId, name, email, role: userRole, logo_url: logo_url || null }
         });
       }
     );
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update client / user details (Admin endpoint)
+app.put('/api/users/:id', authenticateToken, async (req, res) => {
+  if (req.userRole !== 'admin') {
+    return res.status(403).json({ error: 'Only administrators can update user profiles.' });
+  }
+
+  const { id } = req.params;
+  const { name, email, role, logo_url, password } = req.body;
+
+  if (!name || !email) {
+    return res.status(400).json({ error: 'Name and email are required.' });
+  }
+
+  try {
+    const userRole = role === 'admin' ? 'admin' : 'client';
+
+    if (password && password.trim().length > 0) {
+      const passwordHash = await hashPassword(password.trim());
+      db.run(
+        `UPDATE users SET name = ?, email = ?, role = ?, logo_url = ?, password_hash = ? WHERE id = ?`,
+        [name.trim(), email.trim().toLowerCase(), userRole, logo_url || null, passwordHash, id],
+        function (err) {
+          if (err) {
+            if (err.message.includes('UNIQUE constraint failed')) {
+              return res.status(400).json({ error: 'Email is already registered with another account.' });
+            }
+            return res.status(500).json({ error: err.message });
+          }
+          res.json({
+            message: 'User profile updated successfully.',
+            user: { id, name: name.trim(), email: email.trim().toLowerCase(), role: userRole, logo_url: logo_url || null }
+          });
+        }
+      );
+    } else {
+      db.run(
+        `UPDATE users SET name = ?, email = ?, role = ?, logo_url = ? WHERE id = ?`,
+        [name.trim(), email.trim().toLowerCase(), userRole, logo_url || null, id],
+        function (err) {
+          if (err) {
+            if (err.message.includes('UNIQUE constraint failed')) {
+              return res.status(400).json({ error: 'Email is already registered with another account.' });
+            }
+            return res.status(500).json({ error: err.message });
+          }
+          res.json({
+            message: 'User profile updated successfully.',
+            user: { id, name: name.trim(), email: email.trim().toLowerCase(), role: userRole, logo_url: logo_url || null }
+          });
+        }
+      );
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -388,8 +445,8 @@ app.post('/api/users/add', authenticateToken, async (req, res) => {
 // Get all projects for current user (Clients see their assigned projects, Admins see all)
 app.get('/api/projects', authenticateToken, (req, res) => {
   const query = req.userRole === 'admin' 
-    ? `SELECT projects.id, projects.user_id, projects.name, projects.is_public, projects.data, projects.created_at, users.name as client_name, users.email as client_email FROM projects LEFT JOIN users ON projects.user_id = users.id ORDER BY projects.created_at DESC`
-    : `SELECT projects.id, projects.user_id, projects.name, projects.is_public, projects.data, projects.created_at, users.name as client_name, users.email as client_email FROM projects LEFT JOIN users ON projects.user_id = users.id WHERE projects.user_id = ? OR projects.is_public = 1 ORDER BY projects.created_at DESC`;
+    ? `SELECT projects.id, projects.user_id, projects.name, projects.is_public, projects.data, projects.created_at, users.name as client_name, users.email as client_email, users.logo_url as client_logo FROM projects LEFT JOIN users ON projects.user_id = users.id ORDER BY projects.created_at DESC`
+    : `SELECT projects.id, projects.user_id, projects.name, projects.is_public, projects.data, projects.created_at, users.name as client_name, users.email as client_email, users.logo_url as client_logo FROM projects LEFT JOIN users ON projects.user_id = users.id WHERE projects.user_id = ? OR projects.is_public = 1 ORDER BY projects.created_at DESC`;
   
   const params = req.userRole === 'admin' ? [] : [req.userId];
 
@@ -404,6 +461,7 @@ app.get('/api/projects', authenticateToken, (req, res) => {
       name: row.name,
       client_name: row.client_name,
       client_email: row.client_email,
+      client_logo: row.client_logo,
       is_public: !!row.is_public,
       created_at: row.created_at,
       data: JSON.parse(row.data)
@@ -800,7 +858,7 @@ app.get('/api/tours/:id', (req, res) => {
     });
   }
 
-  db.get(`SELECT id, user_id, name, is_public, data FROM projects WHERE id = ?`, [id], (err, row) => {
+  db.get(`SELECT projects.id, projects.user_id, projects.name, projects.is_public, projects.data, users.name as client_name, users.logo_url as client_logo FROM projects LEFT JOIN users ON projects.user_id = users.id WHERE projects.id = ?`, [id], (err, row) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -821,6 +879,8 @@ app.get('/api/tours/:id', (req, res) => {
     res.json({
       id: row.id,
       name: row.name,
+      clientName: row.client_name,
+      clientLogo: row.client_logo,
       tourData: JSON.parse(row.data)
     });
   });
