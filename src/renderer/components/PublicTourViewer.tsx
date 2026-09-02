@@ -305,6 +305,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             {clientLogo && (
               <div
                 style={{
+                  width: '15%',
 
                   overflow: 'hidden',
                   display: 'flex',
