@@ -305,11 +305,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             {clientLogo && (
               <div
                 style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  background: 'rgba(255, 255, 255, 0.08)',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
+
                   overflow: 'hidden',
                   display: 'flex',
                   alignItems: 'center',
@@ -326,9 +322,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                 />
               </div>
             )}
-            <span style={{ fontSize: '24px', marginLeft: '12px', color: '#ffffff', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', textShadow: '0 0 20px rgba(99, 102, 241, 0.6)' }}>
-              {tourName || 'Smart City'}
-            </span>
+
           </div>
         </div>
 
