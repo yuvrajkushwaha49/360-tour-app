@@ -281,6 +281,80 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     }
   };
 
+  // Sync Per-Location Details (Master Plan, Gallery, Connectivity, Downloads) when activeLocationId or tourData changes
+  useEffect(() => {
+    const locations = tourData?.locations || [];
+    const currentLoc = locations.find((l: any) => l.id === activeLocationId) || locations[0];
+    if (!currentLoc) return;
+
+    // 1. Master Plan for active location
+    const locMp = currentLoc.masterPlan || (tourData?.masterPlan ? { ...tourData.masterPlan } : null);
+    if (locMp) {
+      setMpTitle(locMp.title || `${currentLoc.name} Master Plan`);
+      setMpMessage(locMp.message || '');
+      setMpImage(locMp.imageUrl || '');
+    } else {
+      setMpTitle(`${currentLoc.name} Master Plan`);
+      setMpMessage('');
+      setMpImage('');
+    }
+
+    // 2. Gallery for active location
+    const locGallery = currentLoc.gallery || currentLoc.galleryPhotos || currentLoc.images || (tourData?.gallery ? [...tourData.gallery] : []);
+    setGalleryPhotos(Array.isArray(locGallery) ? locGallery : []);
+
+    // 3. Connectivity for active location
+    const locConn = currentLoc.connectivity || (tourData?.connectivity ? [...tourData.connectivity] : []);
+    setConnectivityList(Array.isArray(locConn) ? locConn : []);
+
+    // 4. Downloads for active location
+    const locDl = currentLoc.downloads || (tourData?.downloads ? [...tourData.downloads] : []);
+    setDownloadsList(Array.isArray(locDl) ? locDl : []);
+  }, [activeLocationId, tourData]);
+
+  // Helper to persist location-specific updates to backend
+  const saveUpdatedLocationData = async (locUpdates: Record<string, any>) => {
+    const locations = tourData?.locations || [];
+    const targetLocId = activeLocationId || (locations[0] && locations[0].id);
+    if (!targetLocId) return;
+
+    const updatedLocations = locations.map((loc: any) => {
+      if (loc.id === targetLocId) {
+        return {
+          ...loc,
+          ...locUpdates
+        };
+      }
+      return loc;
+    });
+
+    const updatedTourData = {
+      ...(tourData || {}),
+      locations: updatedLocations
+    };
+
+    const token = localStorage.getItem('crm_token') || localStorage.getItem('token');
+    const res = await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token ? `Bearer ${token}` : ''
+      },
+      body: JSON.stringify({
+        name: tourName,
+        data: updatedTourData
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to save location data');
+    }
+
+    setTourData(updatedTourData);
+    return updatedTourData;
+  };
+
   useEffect(() => {
     fetchTour();
   }, [tourId]);
@@ -385,36 +459,13 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const handleSaveMasterPlan = async () => {
     setIsSavingMp(true);
     try {
-      const token = localStorage.getItem('crm_token');
       const updatedMasterPlan = {
         title: mpTitle || `${displayName} Master Plan`,
         message: mpMessage,
         imageUrl: mpImage
       };
 
-      const updatedTourData = {
-        ...(tourData || {}),
-        masterPlan: updatedMasterPlan
-      };
-
-      const res = await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify({
-          name: tourName,
-          data: updatedTourData
-        })
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to save master plan');
-      }
-
-      setTourData(updatedTourData);
+      await saveUpdatedLocationData({ masterPlan: updatedMasterPlan });
       setIsEditingMasterPlan(false);
     } catch (err: any) {
       alert(err.message || 'Could not save master plan');
@@ -449,25 +500,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
       if (newUrls.length > 0) {
         const updatedGallery = [...galleryPhotos, ...newUrls];
-        const updatedTourData = {
-          ...(tourData || {}),
-          gallery: updatedGallery
-        };
-
-        await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: token ? `Bearer ${token}` : ''
-          },
-          body: JSON.stringify({
-            name: tourName,
-            data: updatedTourData
-          })
-        });
-
+        await saveUpdatedLocationData({ gallery: updatedGallery });
         setGalleryPhotos(updatedGallery);
-        setTourData(updatedTourData);
       }
     } catch (err: any) {
       alert(err.message || 'Failed to upload gallery photos');
@@ -481,26 +515,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
     const updatedGallery = galleryPhotos.filter((_, idx) => idx !== indexToDelete);
     try {
-      const token = localStorage.getItem('crm_token');
-      const updatedTourData = {
-        ...(tourData || {}),
-        gallery: updatedGallery
-      };
-
-      await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify({
-          name: tourName,
-          data: updatedTourData
-        })
-      });
-
+      await saveUpdatedLocationData({ gallery: updatedGallery });
       setGalleryPhotos(updatedGallery);
-      setTourData(updatedTourData);
     } catch (err: any) {
       alert(err.message || 'Failed to delete photo');
     }
@@ -557,26 +573,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         updatedList = [...connectivityList, newItem];
       }
 
-      const token = localStorage.getItem('crm_token');
-      const updatedTourData = {
-        ...(tourData || {}),
-        connectivity: updatedList
-      };
-
-      await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify({
-          name: tourName,
-          data: updatedTourData
-        })
-      });
-
+      await saveUpdatedLocationData({ connectivity: updatedList });
       setConnectivityList(updatedList);
-      setTourData(updatedTourData);
       setIsEditingConnectivity(false);
       setEditingConnItem(null);
       setConnFormTitle('');
@@ -594,26 +592,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
     const updatedList = connectivityList.filter(item => item.id !== idToDelete);
     try {
-      const token = localStorage.getItem('crm_token');
-      const updatedTourData = {
-        ...(tourData || {}),
-        connectivity: updatedList
-      };
-
-      await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify({
-          name: tourName,
-          data: updatedTourData
-        })
-      });
-
+      await saveUpdatedLocationData({ connectivity: updatedList });
       setConnectivityList(updatedList);
-      setTourData(updatedTourData);
     } catch (err: any) {
       alert(err.message || 'Failed to delete connectivity item');
     }
@@ -715,26 +695,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         updatedList = [...downloadsList, newItem];
       }
 
-      const token = localStorage.getItem('crm_token') || localStorage.getItem('token');
-      const updatedTourData = {
-        ...(tourData || {}),
-        downloads: updatedList
-      };
-
-      await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify({
-          name: tourName,
-          data: updatedTourData
-        })
-      });
-
+      await saveUpdatedLocationData({ downloads: updatedList });
       setDownloadsList(updatedList);
-      setTourData(updatedTourData);
       setIsEditingDownload(false);
       setEditingDownloadItem(null);
       setDlFormTitle('');
@@ -752,26 +714,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
     const updatedList = downloadsList.filter(item => item.id !== idToDelete);
     try {
-      const token = localStorage.getItem('crm_token') || localStorage.getItem('token');
-      const updatedTourData = {
-        ...(tourData || {}),
-        downloads: updatedList
-      };
-
-      await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify({
-          name: tourName,
-          data: updatedTourData
-        })
-      });
-
+      await saveUpdatedLocationData({ downloads: updatedList });
       setDownloadsList(updatedList);
-      setTourData(updatedTourData);
     } catch (err: any) {
       alert(err.message || 'Failed to delete document');
     }
@@ -1235,6 +1179,50 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     })
     : [];
 
+  // Helper to render Location Indicator & Switcher inside all modals
+  const renderModalLocationBadge = () => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+      <span style={{
+        background: 'rgba(99, 102, 241, 0.22)',
+        border: '1px solid rgba(99, 102, 241, 0.45)',
+        color: '#c7d2fe',
+        fontSize: '0.72rem',
+        fontWeight: 700,
+        padding: '3px 10px',
+        borderRadius: '12px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px'
+      }}>
+        📍 {currentLocation?.name || 'Current Space'}
+      </span>
+      {locations.length > 1 && (
+        <select
+          value={activeLocationId}
+          onChange={(e) => handleLocationChange(e.target.value)}
+          style={{
+            background: 'rgba(0, 0, 0, 0.5)',
+            border: '1px solid rgba(255, 255, 255, 0.18)',
+            borderRadius: '8px',
+            color: '#ffffff',
+            fontSize: '0.72rem',
+            fontWeight: 600,
+            padding: '3px 8px',
+            outline: 'none',
+            cursor: 'pointer'
+          }}
+          title="Switch active location details"
+        >
+          {locations.map((loc: any) => (
+            <option key={loc.id} value={loc.id} style={{ background: '#090d1f', color: '#ffffff' }}>
+              {loc.name}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+
   // Calculate dynamic adjustments based on Time-of-Day mode
   const baseAdjustments: ImageAdjustments = currentLocation?.adjustments || DEFAULT_ADJUSTMENTS;
   let dynamicAdjustments: ImageAdjustments = { ...baseAdjustments };
@@ -1451,7 +1439,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <div className="smart-menu-icon"><Map size={15} /></div>
             <div>
               <div className="smart-menu-label">MASTER PLAN</div>
-              <div className="smart-menu-sub">View city planning</div>
+              <div className="smart-menu-sub">{currentLocation?.name || 'Space'} planning</div>
             </div>
           </div>
 
@@ -1459,7 +1447,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <div className="smart-menu-icon"><Building2 size={15} /></div>
             <div>
               <div className="smart-menu-label">INFRASTRUCTURE</div>
-              <div className="smart-menu-sub">World class infrastructure</div>
+              <div className="smart-menu-sub">{currentLocation?.name || 'Space'} facilities</div>
             </div>
           </div>
 
@@ -1467,15 +1455,15 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <div className="smart-menu-icon"><Network size={15} /></div>
             <div>
               <div className="smart-menu-label">CONNECTIVITY</div>
-              <div className="smart-menu-sub">Road • Rail • Air • Sea</div>
+              <div className="smart-menu-sub">{currentLocation?.name || 'Space'} transit & routes</div>
             </div>
           </div>
 
-          <div className="smart-menu-item" onClick={() => alert(`${displayName}: The Future Is Here`)}>
+          <div className="smart-menu-item" onClick={() => setActiveNavTab('why')}>
             <div className="smart-menu-icon"><Star size={15} /></div>
             <div>
-              <div className="smart-menu-label">WHY {displayName.toUpperCase()}?</div>
-              <div className="smart-menu-sub">The future is here</div>
+              <div className="smart-menu-label">WHY {currentLocation?.name?.toUpperCase() || displayName.toUpperCase()}?</div>
+              <div className="smart-menu-sub">Key features & insights</div>
             </div>
           </div>
 
@@ -1483,7 +1471,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <div className="smart-menu-icon"><ImageIcon size={15} /></div>
             <div>
               <div className="smart-menu-label">GALLERY</div>
-              <div className="smart-menu-sub">Photos & videos</div>
+              <div className="smart-menu-sub">{currentLocation?.name || 'Space'} photos ({galleryPhotos.length})</div>
             </div>
           </div>
 
@@ -1491,7 +1479,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <div className="smart-menu-icon"><FolderDown size={15} /></div>
             <div>
               <div className="smart-menu-label">DOWNLOADS</div>
-              <div className="smart-menu-sub">Brochures & documents</div>
+              <div className="smart-menu-sub">{currentLocation?.name || 'Space'} docs ({downloadsList.length})</div>
             </div>
           </div>
         </div>
@@ -1875,11 +1863,12 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                 </div>
                 <div>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '0.02em' }}>
-                    {mpTitle || `${displayName} - Master Plan Blueprint`}
+                    {mpTitle || `${currentLocation?.name || displayName} - Master Plan Blueprint`}
                   </h3>
                   <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
                     Strategic zoning layout, infrastructure corridors & visionary development
                   </p>
+                  {renderModalLocationBadge()}
                 </div>
               </div>
 
@@ -2166,11 +2155,12 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                 </div>
                 <div>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '0.02em' }}>
-                    PROJECT PHOTO GALLERY
+                    PHOTO GALLERY • {currentLocation?.name?.toUpperCase() || displayName.toUpperCase()}
                   </h3>
                   <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
-                    High-resolution photographs, site captures, and visual gallery for {displayName}
+                    High-resolution photographs and visual gallery for {currentLocation?.name || displayName}
                   </p>
+                  {renderModalLocationBadge()}
                 </div>
               </div>
 
@@ -2323,11 +2313,12 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                 </div>
                 <div>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '0.02em' }}>
-                    CONNECTIVITY & TRANSIT NETWORK
+                    CONNECTIVITY • {currentLocation?.name?.toUpperCase() || displayName.toUpperCase()}
                   </h3>
                   <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
-                    Strategic road, rail, air, metro, and logistics transit corridors for {displayName}
+                    Strategic transit corridors, routes & access points for {currentLocation?.name || displayName}
                   </p>
+                  {renderModalLocationBadge()}
                 </div>
               </div>
 
@@ -2778,11 +2769,12 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                 </div>
                 <div>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '0.02em' }}>
-                    BROCHURES & PROJECT DOWNLOADS
+                    DOWNLOADS • {currentLocation?.name?.toUpperCase() || displayName.toUpperCase()}
                   </h3>
                   <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
-                    Official e-brochures, master plans, floor layouts, and project documents for {displayName}
+                    Official e-brochures, floor layouts & documents for {currentLocation?.name || displayName}
                   </p>
+                  {renderModalLocationBadge()}
                 </div>
               </div>
 
@@ -3299,7 +3291,357 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         </div>
       )}
 
-      {/* 5. LIGHTBOX FULLSCREEN PHOTO VIEWER */}
+      {/* 5. INFRASTRUCTURE & SPATIAL HIGHLIGHTS MODAL OVERLAY */}
+      {activeNavTab === 'infrastructure' && (
+        <div className="smart-content-overlay" onClick={() => setActiveNavTab('overview')}>
+          <div className="smart-content-modal" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="smart-content-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'rgba(99, 102, 241, 0.18)',
+                  border: '1px solid rgba(99, 102, 241, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#818cf8'
+                }}>
+                  <Building2 size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '0.02em' }}>
+                    INFRASTRUCTURE & HIGHLIGHTS • {currentLocation?.name?.toUpperCase() || displayName.toUpperCase()}
+                  </h3>
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+                    Spatial architecture, connected beacons & utilities for {currentLocation?.name || displayName}
+                  </p>
+                  {renderModalLocationBadge()}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  onClick={() => setActiveNavTab('overview')}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '50%',
+                    width: '32px',
+                    height: '32px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#94a3b8',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="smart-content-modal-body">
+              {/* Space Overview Card */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.08))',
+                border: '1px solid rgba(99, 102, 241, 0.25)',
+                borderRadius: '16px',
+                padding: '16px',
+                marginBottom: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px'
+              }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#ffffff' }}>
+                    {currentLocation?.name || 'Active Location'}
+                  </h4>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
+                    {currentLocation?.subtitle || 'Interactive 360° Node'}
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '10px',
+                    padding: '8px 14px',
+                    textAlign: 'center'
+                  }}>
+                    <span style={{ fontSize: '0.66rem', color: '#94a3b8', display: 'block' }}>BEACONS</span>
+                    <strong style={{ fontSize: '1rem', color: '#818cf8' }}>
+                      {currentLocation?.hotspots?.length || 0}
+                    </strong>
+                  </div>
+                  <div style={{
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '10px',
+                    padding: '8px 14px',
+                    textAlign: 'center'
+                  }}>
+                    <span style={{ fontSize: '0.66rem', color: '#94a3b8', display: 'block' }}>GALLERY</span>
+                    <strong style={{ fontSize: '1rem', color: '#c084fc' }}>
+                      {galleryPhotos.length}
+                    </strong>
+                  </div>
+                  <div style={{
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '10px',
+                    padding: '8px 14px',
+                    textAlign: 'center'
+                  }}>
+                    <span style={{ fontSize: '0.66rem', color: '#94a3b8', display: 'block' }}>DOCS</span>
+                    <strong style={{ fontSize: '1rem', color: '#34d399' }}>
+                      {downloadsList.length}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Hotspots / Interactive Beacons in this location */}
+              <h5 style={{ fontSize: '0.86rem', fontWeight: 700, color: '#e2e8f0', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Navigation size={14} className="text-indigo-400" />
+                <span>Connected Spatial Beacons & Waypoints ({currentLocation?.hotspots?.length || 0})</span>
+              </h5>
+
+              {(!currentLocation?.hotspots || currentLocation.hotspots.length === 0) ? (
+                <div style={{
+                  padding: '30px',
+                  textAlign: 'center',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '14px',
+                  border: '1px dashed rgba(255, 255, 255, 0.1)'
+                }}>
+                  <p style={{ margin: 0, fontSize: '0.84rem', color: '#94a3b8' }}>
+                    No linked beacons configured for this space yet.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '12px' }}>
+                  {currentLocation.hotspots.map((hs: any, idx: number) => {
+                    const targetLoc = locations.find((l: any) => l.id === hs.targetLocationId);
+                    return (
+                      <div
+                        key={hs.id || idx}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: '12px',
+                          padding: '12px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '26px',
+                            height: '26px',
+                            borderRadius: '8px',
+                            background: 'rgba(99, 102, 241, 0.25)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#818cf8',
+                            fontSize: '0.72rem',
+                            fontWeight: 700
+                          }}>
+                            {idx + 1}
+                          </div>
+                          <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#ffffff' }}>
+                            {hs.title || targetLoc?.name || `Waypoint #${idx + 1}`}
+                          </span>
+                        </div>
+                        {hs.description && (
+                          <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8', lineHeight: 1.4 }}>
+                            {hs.description}
+                          </p>
+                        )}
+                        {targetLoc && (
+                          <div style={{
+                            marginTop: 'auto',
+                            paddingTop: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between'
+                          }}>
+                            <span style={{ fontSize: '0.68rem', color: '#6366f1' }}>
+                              Links to: {targetLoc.name}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleQuickExploreNavigate(targetLoc.id);
+                                setActiveNavTab('overview');
+                              }}
+                              style={{
+                                background: 'rgba(99, 102, 241, 0.2)',
+                                border: '1px solid rgba(99, 102, 241, 0.4)',
+                                borderRadius: '6px',
+                                color: '#c7d2fe',
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                padding: '3px 8px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Jump ➔
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. WHY LOCATION / SPOTLIGHT MODAL OVERLAY */}
+      {activeNavTab === 'why' && (
+        <div className="smart-content-overlay" onClick={() => setActiveNavTab('overview')}>
+          <div className="smart-content-modal" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="smart-content-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'rgba(99, 102, 241, 0.18)',
+                  border: '1px solid rgba(99, 102, 241, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#818cf8'
+                }}>
+                  <Star size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '0.02em' }}>
+                    WHY {currentLocation?.name?.toUpperCase() || displayName.toUpperCase()}?
+                  </h3>
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+                    Unique architecture, spatial advantages & highlights of {currentLocation?.name || displayName}
+                  </p>
+                  {renderModalLocationBadge()}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  onClick={() => setActiveNavTab('overview')}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '50%',
+                    width: '32px',
+                    height: '32px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#94a3b8',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="smart-content-modal-body">
+              {/* Feature Highlights Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '14px',
+                  padding: '16px'
+                }}>
+                  <div style={{ color: '#818cf8', marginBottom: '8px' }}>
+                    <Globe size={22} />
+                  </div>
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '0.92rem', fontWeight: 700, color: '#ffffff' }}>
+                    360° Spherical Immersion
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '0.76rem', color: '#94a3b8', lineHeight: 1.5 }}>
+                    Full 8K resolution panorama projection capturing all angles of {currentLocation?.name || 'this space'}.
+                  </p>
+                </div>
+
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '14px',
+                  padding: '16px'
+                }}>
+                  <div style={{ color: '#c084fc', marginBottom: '8px' }}>
+                    <Navigation size={22} />
+                  </div>
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '0.92rem', fontWeight: 700, color: '#ffffff' }}>
+                    Interactive Wayfinding
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '0.76rem', color: '#94a3b8', lineHeight: 1.5 }}>
+                    Seamless transitions and instant teleports to surrounding rooms and exterior views.
+                  </p>
+                </div>
+
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '14px',
+                  padding: '16px'
+                }}>
+                  <div style={{ color: '#34d399', marginBottom: '8px' }}>
+                    <ImageIcon size={22} />
+                  </div>
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '0.92rem', fontWeight: 700, color: '#ffffff' }}>
+                    Dedicated Media & Gallery
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '0.76rem', color: '#94a3b8', lineHeight: 1.5 }}>
+                    Curated high-resolution photo highlights, plans, and architectural documentations.
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <div style={{ textAlign: 'center', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setActiveNavTab('overview')}
+                  style={{
+                    background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                    border: 'none',
+                    borderRadius: '12px',
+                    color: '#ffffff',
+                    padding: '12px 28px',
+                    fontSize: '0.88rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 18px rgba(99, 102, 241, 0.4)'
+                  }}
+                >
+                  Explore {currentLocation?.name || 'Space'} in 360°
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. LIGHTBOX FULLSCREEN PHOTO VIEWER */}
       {lightboxIndex !== null && galleryPhotos[lightboxIndex] && (
         <div className="smart-lightbox" onClick={() => setLightboxIndex(null)}>
           <button
