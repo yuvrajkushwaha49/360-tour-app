@@ -34,7 +34,7 @@ import {
   ZoomIn,
   Info
 } from 'lucide-react';
-import Viewer360 from './Viewer360';
+import Viewer360, { Viewer360Ref } from './Viewer360';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
 import { ImageAdjustments, DEFAULT_ADJUSTMENTS } from '../utils/imageAdjustmentEngine';
 import { uploadFileWithFallback } from '../utils/uploadWithFallback';
@@ -88,10 +88,27 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [autoRotate, setAutoRotate] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const carouselScrollRef = useRef<HTMLDivElement>(null);
+  const viewer360Ref = useRef<Viewer360Ref>(null);
 
   const handleLocationChange = (locId: string) => {
     setActiveLocationId(locId);
     localStorage.setItem(`active_public_loc_${tourId}`, locId);
+  };
+
+  const handleQuickExploreNavigate = (locId: string) => {
+    if (locId === activeLocationId) return;
+    const locationsList = tourData?.locations || [];
+    const targetLoc = locationsList.find((l: any) => l.id === locId);
+    if (!targetLoc) return;
+
+    const currentLoc = locationsList.find((l: any) => l.id === activeLocationId) || locationsList[0];
+    const matchingHotspot = currentLoc?.hotspots?.find((h: any) => h.targetLocationId === locId);
+
+    if (viewer360Ref.current?.navigateToLocation) {
+      viewer360Ref.current.navigateToLocation(locId, matchingHotspot?.position, targetLoc);
+    } else {
+      handleLocationChange(locId);
+    }
   };
 
   useEffect(() => {
@@ -605,7 +622,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         <div
           className="smart-cta-card"
           onClick={() => {
-            if (locations.length > 0) handleLocationChange(locations[0].id);
+            if (locations.length > 0) handleQuickExploreNavigate(locations[0].id);
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -700,6 +717,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       {/* 360 Canvas View with 3D Beacons */}
       <div className="public-viewer-canvas" id="viewer-canvas-container">
         <Viewer360
+          ref={viewer360Ref}
           readOnly={true}
           directions={currentLocation?.directions || { F: [], B: [], L: [], R: [], U: [], D: [] }}
           gridConfigs={currentLocation?.gridConfigs || {}}
@@ -750,7 +768,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                 return (
                   <div
                     key={loc.id}
-                    onClick={() => handleLocationChange(loc.id)}
+                    onClick={() => handleQuickExploreNavigate(loc.id)}
                     className={`smart-thumb-card ${isActive ? 'active' : ''}`}
                     title={loc.name}
                   >

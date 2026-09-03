@@ -1325,21 +1325,27 @@ interface Viewer360Props {
   onAddAreaOutline?: (hs: HotspotItem) => void;
   areaType?: 'building' | 'river' | 'road';
   readOnly?: boolean;
+  autoRotate?: boolean;
   onOpenAdjustments?: () => void;
   onImageNotFound?: () => void;
 }
 
+export interface Viewer360Ref {
+  navigateToLocation: (targetId: string, customPos?: [number, number, number], targetLocData?: any) => void;
+}
+
 const CameraZoomEffect: React.FC<{ isZooming: boolean; targetPos: [number, number, number] | null; controlsRef: any }> = ({ isZooming, targetPos, controlsRef }) => {
   useFrame(({ camera }) => {
-    if (isZooming) {
-      camera.fov = THREE.MathUtils.lerp(camera.fov, 30, 0.025);
-      camera.updateProjectionMatrix();
+    if (isZooming && (camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+      const pCam = camera as THREE.PerspectiveCamera;
+      pCam.fov = THREE.MathUtils.lerp(pCam.fov, 26, 0.04);
+      pCam.updateProjectionMatrix();
 
       if (targetPos && controlsRef.current) {
         const pinVec = new THREE.Vector3(targetPos[0], targetPos[1], targetPos[2]).normalize();
         const cameraPos = camera.position.clone();
         const desiredTarget = cameraPos.clone().add(pinVec.multiplyScalar(100));
-        controlsRef.current.target.lerp(desiredTarget, 0.025);
+        controlsRef.current.target.lerp(desiredTarget, 0.045);
         controlsRef.current.update();
       }
     }
@@ -1347,7 +1353,7 @@ const CameraZoomEffect: React.FC<{ isZooming: boolean; targetPos: [number, numbe
   return null;
 };
 
-export const Viewer360: React.FC<Viewer360Props> = ({
+export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
   adjustments = DEFAULT_ADJUSTMENTS,
   directions = { F: [], B: [], L: [], R: [], U: [], D: [] },
   gridConfigs = {},
@@ -1369,7 +1375,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
   readOnly = false,
   onOpenAdjustments,
   onImageNotFound
-}) => {
+}, ref) => {
   const [autoRotate, setAutoRotate] = useState(false);
   const [heading, setHeading] = useState(0);
   const [imageMissingError, setImageMissingError] = useState<boolean>(false);
@@ -1381,22 +1387,107 @@ export const Viewer360: React.FC<Viewer360Props> = ({
   const headingTextRef = useRef<HTMLSpanElement>(null);
   const compassContainerRef = useRef<HTMLDivElement>(null);
 
-  const handleNavigateWithZoom = (targetId: string, hotspotPos?: [number, number, number]) => {
+  // Smooth camera lookAt transition towards target hotspot + preload destination images
+  const navigateToLocation = useCallback((targetId: string, customPos?: [number, number, number], targetLocData?: any) => {
     if (!targetId) return;
-    if (hotspotPos) setZoomTargetPos(hotspotPos);
+
+    // 1. Find hotspot matching targetId in current scene if position not explicitly provided
+    let targetHotspotPos = customPos;
+    if (!targetHotspotPos && hotspots && hotspots.length > 0) {
+      const hs = hotspots.find(h => h.targetLocationId === targetId);
+      if (hs?.position) {
+        targetHotspotPos = hs.position;
+      }
+    }
+
+    if (targetHotspotPos) {
+      setZoomTargetPos(targetHotspotPos);
+    }
     setIsZooming(true);
 
-    setTimeout(() => {
-      setIsBlurring(true);
-      setTimeout(() => {
-        onNavigate(targetId);
+    // 2. Extract texture URLs to preload for target location
+    const preloadUrls: string[] = [];
+    const resolveUrl = (pathStr: string) => {
+      if (!pathStr) return '';
+      if (pathStr.startsWith('http://') || pathStr.startsWith('https://') || pathStr.startsWith('data:')) {
+        return toCloudFrontUrl(pathStr);
+      }
+      if (pathStr.startsWith('/uploads/')) {
+        return `${API_BASE_URL}${pathStr}`;
+      }
+      const cleanPath = pathStr.replace(/^file:\/\/\/?/, '');
+      return `${API_BASE_URL}/api/local-image?path=${encodeURIComponent(cleanPath)}`;
+    };
+
+    if (targetLocData) {
+      if (targetLocData.stitchedPanoPath) {
+        preloadUrls.push(resolveUrl(targetLocData.stitchedPanoPath));
+      } else if (targetLocData.directions) {
+        Object.keys(targetLocData.directions).forEach(faceKey => {
+          const imgs = targetLocData.directions[faceKey] || [];
+          imgs.forEach((img: any) => {
+            if (img.path) preloadUrls.push(resolveUrl(img.path));
+          });
+        });
+      }
+    }
+
+    let isPreloadComplete = false;
+    let isMinLookAtComplete = false;
+
+    const executeFinalSwitch = () => {
+      if (isPreloadComplete && isMinLookAtComplete) {
+        setIsBlurring(true);
         setTimeout(() => {
-          setIsBlurring(false);
-          setIsZooming(false);
-          setZoomTargetPos(null);
-        }, 250);
-      }, 250);
-    }, 500);
+          onNavigate(targetId);
+          setTimeout(() => {
+            setIsBlurring(false);
+            setIsZooming(false);
+            setZoomTargetPos(null);
+          }, 300);
+        }, 200);
+      }
+    };
+
+    // Minimum camera lookAt animation time (650ms for smooth visual sweep towards hotspot)
+    setTimeout(() => {
+      isMinLookAtComplete = true;
+      executeFinalSwitch();
+    }, 650);
+
+    if (preloadUrls.length === 0) {
+      isPreloadComplete = true;
+      executeFinalSwitch();
+    } else {
+      let loadedCount = 0;
+      const loader = new THREE.TextureLoader();
+      loader.setCrossOrigin('anonymous');
+
+      const onTileDone = () => {
+        loadedCount++;
+        if (loadedCount >= preloadUrls.length) {
+          isPreloadComplete = true;
+          executeFinalSwitch();
+        }
+      };
+
+      preloadUrls.forEach(url => {
+        loader.load(
+          url,
+          () => onTileDone(),
+          undefined,
+          () => onTileDone()
+        );
+      });
+    }
+  }, [hotspots, onNavigate]);
+
+  React.useImperativeHandle(ref, () => ({
+    navigateToLocation
+  }), [navigateToLocation]);
+
+  const handleNavigateWithZoom = (targetId: string, hotspotPos?: [number, number, number]) => {
+    navigateToLocation(targetId, hotspotPos);
   };
 
   const [isPreloading, setIsPreloading] = useState<boolean>(true);
@@ -1922,6 +2013,8 @@ export const Viewer360: React.FC<Viewer360Props> = ({
       )}
     </div>
   );
-};
+});
+
+Viewer360.displayName = 'Viewer360';
 
 export default Viewer360;
