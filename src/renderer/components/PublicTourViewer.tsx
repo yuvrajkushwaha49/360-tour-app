@@ -164,7 +164,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     try {
       const token = localStorage.getItem('crm_token');
       const formData = new FormData();
-      formData.append('image', file);
+      formData.append('file', file);
 
       const res = await fetch(`${API_BASE_URL}/api/upload`, {
         method: 'POST',
@@ -237,7 +237,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
       for (let i = 0; i < files.length; i++) {
         const formData = new FormData();
-        formData.append('image', files[i]);
+        formData.append('file', files[i]);
 
         const res = await fetch(`${API_BASE_URL}/api/upload`, {
           method: 'POST',

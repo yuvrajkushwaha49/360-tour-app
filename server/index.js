@@ -98,51 +98,67 @@ app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 
 // S3 / Local Image Upload Endpoint
-app.post('/api/upload', upload.single('file'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file provided for upload.' });
-  }
-
-  if (s3Client && S3_BUCKET) {
-    try {
-      const { PutObjectCommand } = require('@aws-sdk/client-s3');
-      const fileStream = fs.createReadStream(req.file.path);
-      const key = `uploads/${req.file.filename}`;
-      const ext = path.extname(req.file.originalname).toLowerCase();
-      const contentType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
-
-      const uploadParams = {
-        Bucket: S3_BUCKET,
-        Key: key,
-        Body: fileStream,
-        ContentType: contentType,
-        CacheControl: 'public, max-age=31536000, immutable'
-      };
-
-      await s3Client.send(new PutObjectCommand(uploadParams));
-
-      // Clean up temporary local file
-      fs.unlink(req.file.path, () => {});
-
-      const assetUrl = getPublicAssetUrl(key);
-      console.log(`[CloudFront/S3] ✅ Upload success: ${assetUrl}`);
-      return res.json({
-        url: assetUrl,
-        filename: req.file.filename,
-        storage: CLOUDFRONT_DOMAIN ? 'cloudfront' : 's3'
-      });
-    } catch (s3Err) {
-      console.error('[S3 Upload Error]:', s3Err.message);
+app.post('/api/upload', (req, res, next) => {
+  upload.any()(req, res, (err) => {
+    if (err) {
+      console.error('[Upload Multer Error]:', err);
+      return res.status(400).json({ error: err.message || 'File upload failed.' });
     }
-  }
-
-  // Fallback to local server upload URL
-  const localUrl = `/uploads/${req.file.filename}`;
-  res.json({
-    url: localUrl,
-    filename: req.file.filename,
-    storage: 'local'
+    if (req.files && req.files.length > 0) {
+      req.file = req.files[0];
+    }
+    next();
   });
+}, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file provided for upload.' });
+    }
+
+    if (s3Client && S3_BUCKET) {
+      try {
+        const { PutObjectCommand } = require('@aws-sdk/client-s3');
+        const fileStream = fs.createReadStream(req.file.path);
+        const key = `uploads/${req.file.filename}`;
+        const ext = path.extname(req.file.originalname).toLowerCase();
+        const contentType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.svg' ? 'image/svg+xml' : 'image/jpeg';
+
+        const uploadParams = {
+          Bucket: S3_BUCKET,
+          Key: key,
+          Body: fileStream,
+          ContentType: contentType,
+          CacheControl: 'public, max-age=31536000, immutable'
+        };
+
+        await s3Client.send(new PutObjectCommand(uploadParams));
+
+        // Clean up temporary local file
+        fs.unlink(req.file.path, () => {});
+
+        const assetUrl = getPublicAssetUrl(key);
+        console.log(`[CloudFront/S3] ✅ Upload success: ${assetUrl}`);
+        return res.json({
+          url: assetUrl,
+          filename: req.file.filename,
+          storage: CLOUDFRONT_DOMAIN ? 'cloudfront' : 's3'
+        });
+      } catch (s3Err) {
+        console.error('[S3 Upload Error]:', s3Err.message);
+      }
+    }
+
+    // Fallback to local server upload URL
+    const localUrl = `/uploads/${req.file.filename}`;
+    res.json({
+      url: localUrl,
+      filename: req.file.filename,
+      storage: 'local'
+    });
+  } catch (err) {
+    console.error('[Upload Error]:', err);
+    res.status(500).json({ error: err.message || 'Internal server error during upload.' });
+  }
 });
 
 // S3 Batch Image Upload Endpoint (For fast Studio multi-tile uploads)
