@@ -658,7 +658,7 @@ interface SceneGroupProps {
   isPlacingHotspot: boolean;
   isDrawingArea: boolean;
   onAddHotspot: (position: [number, number, number]) => void;
-  onNavigate: (targetId: string) => void;
+  onNavigate: (targetId: string, position?: [number, number, number]) => void;
   drawingPoints: [number, number, number][];
   setDrawingPoints: (pts: [number, number, number][]) => void;
   headingTextRef: React.RefObject<HTMLSpanElement>;
@@ -668,6 +668,7 @@ interface SceneGroupProps {
   onAddAreaOutline: (hs: HotspotItem) => void;
   areaType: 'building' | 'river' | 'road';
   isPreloading?: boolean;
+  readOnly?: boolean;
 }
 
 const SceneGroup: React.FC<SceneGroupProps> = ({
@@ -689,7 +690,8 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
   onDeleteHotspot,
   onAddAreaOutline,
   areaType,
-  isPreloading = false
+  isPreloading = false,
+  readOnly = false
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const [activeInfoId, setActiveInfoId] = useState<string | null>(null);
@@ -1053,22 +1055,51 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                               </div>
                               <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#ffffff' }}>{h.name}</span>
                             </div>
-                            {h.subtitle && (
-                              <span
-                                style={{
-                                  fontSize: '0.66rem',
-                                  fontWeight: 600,
-                                  color: h.beaconColor || '#a5b4fc',
-                                  background: h.beaconColor ? `${h.beaconColor}22` : 'rgba(99, 102, 241, 0.15)',
-                                  border: `1px solid ${h.beaconColor ? `${h.beaconColor}55` : 'rgba(99, 102, 241, 0.3)'}`,
-                                  padding: '1px 7px',
-                                  borderRadius: '10px',
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
-                                {h.subtitle}
-                              </span>
-                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {h.subtitle && (
+                                <span
+                                  style={{
+                                    fontSize: '0.66rem',
+                                    fontWeight: 600,
+                                    color: h.beaconColor || '#a5b4fc',
+                                    background: h.beaconColor ? `${h.beaconColor}22` : 'rgba(99, 102, 241, 0.15)',
+                                    border: `1px solid ${h.beaconColor ? `${h.beaconColor}55` : 'rgba(99, 102, 241, 0.3)'}`,
+                                    padding: '1px 7px',
+                                    borderRadius: '10px',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {h.subtitle}
+                                </span>
+                              )}
+                              {!readOnly && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveInfoId(null);
+                                    onEditHotspot(h);
+                                  }}
+                                  style={{
+                                    background: 'rgba(99, 102, 241, 0.25)',
+                                    border: '1px solid rgba(99, 102, 241, 0.5)',
+                                    borderRadius: '6px',
+                                    color: '#c7d2fe',
+                                    padding: '2px 7px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}
+                                  title="Edit Hotspot Details"
+                                >
+                                  <span>✏</span>
+                                  <span>Edit</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           {/* Area Tag if present */}
@@ -1876,6 +1907,7 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
           onAddAreaOutline={onAddAreaOutline}
           areaType={areaType}
           isPreloading={isPreloading}
+          readOnly={readOnly}
         />
         <OrbitControls
           ref={controlsRef}

@@ -693,6 +693,33 @@ export default function App() {
     }
   };
 
+  const handleUploadTargetRoomThumbnail = async (targetRoomId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !targetRoomId) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const resData = await uploadFileWithFallback(
+        `${API_BASE_URL}/api/upload`,
+        formData,
+        authToken ? { Authorization: `Bearer ${authToken}` } : {}
+      );
+
+      if (resData && resData.url) {
+        setLocations(prev => prev.map(loc =>
+          loc.id === targetRoomId
+            ? { ...loc, thumbnailPath: resData.url, thumbnailUrl: resData.url }
+            : loc
+        ));
+        addLog(`Updated custom thumbnail for room: ${targetRoomId}`);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to upload room thumbnail');
+    }
+  };
+
   const handleSaveLocationDetails = () => {
     if (!modalLocName.trim()) return;
 
@@ -1986,14 +2013,12 @@ export default function App() {
                 {showLinkModal && (
                   <div style={{
                     position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    backgroundColor: 'rgba(0,0,0,0.78)',
+                    inset: 0,
+                    backgroundColor: 'rgba(0,0,0,0.85)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    zIndex: 1002,
+                    zIndex: 99999,
                     backdropFilter: 'blur(16px)',
                     WebkitBackdropFilter: 'blur(16px)',
                     animation: 'fadeIn 0.2s ease-out'
@@ -2205,15 +2230,19 @@ export default function App() {
                                   const selectedLoc = locations.find(l => l.id === selectedTargetId);
                                   if (!selectedLoc) return null;
 
-                                  const thumbUrl = selectedLoc.stitchedPanoPath
-                                    ? (selectedLoc.stitchedPanoPath.startsWith('http') || selectedLoc.stitchedPanoPath.startsWith('data:')
-                                      ? toCloudFrontUrl(selectedLoc.stitchedPanoPath)
-                                      : `${API_BASE_URL}/api/local-image?path=${encodeURIComponent(selectedLoc.stitchedPanoPath.replace(/^file:\/\/\/?/, ''))}`)
-                                    : (selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path)
-                                      ? ((selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path).startsWith('http') || (selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path).startsWith('data:')
-                                        ? toCloudFrontUrl(selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path)
-                                        : `${API_BASE_URL}/api/local-image?path=${encodeURIComponent((selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path).replace(/^file:\/\/\/?/, ''))}`)
-                                      : '';
+                                  const thumbUrl = (selectedLoc.thumbnailPath || selectedLoc.thumbnailUrl)
+                                    ? ((selectedLoc.thumbnailPath || selectedLoc.thumbnailUrl)!.startsWith('http') || (selectedLoc.thumbnailPath || selectedLoc.thumbnailUrl)!.startsWith('data:')
+                                      ? toCloudFrontUrl(selectedLoc.thumbnailPath || selectedLoc.thumbnailUrl || '')
+                                      : `${API_BASE_URL}/api/local-image?path=${encodeURIComponent((selectedLoc.thumbnailPath || selectedLoc.thumbnailUrl || '').replace(/^file:\/\/\/?/, ''))}`)
+                                    : selectedLoc.stitchedPanoPath
+                                      ? (selectedLoc.stitchedPanoPath.startsWith('http') || selectedLoc.stitchedPanoPath.startsWith('data:')
+                                        ? toCloudFrontUrl(selectedLoc.stitchedPanoPath)
+                                        : `${API_BASE_URL}/api/local-image?path=${encodeURIComponent(selectedLoc.stitchedPanoPath.replace(/^file:\/\/\/?/, ''))}`)
+                                      : (selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path)
+                                        ? ((selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path).startsWith('http') || (selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path).startsWith('data:')
+                                          ? toCloudFrontUrl(selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path)
+                                          : `${API_BASE_URL}/api/local-image?path=${encodeURIComponent((selectedLoc.directions?.F?.[0]?.path || Object.values(selectedLoc.directions || {}).flat()[0]?.path).replace(/^file:\/\/\/?/, ''))}`)
+                                        : '';
 
                                   const totalFacesCount = Object.values(selectedLoc.directions || {}).reduce((acc, curr) => acc + (curr?.length || 0), 0);
 
@@ -2253,43 +2282,63 @@ export default function App() {
                                         </button>
                                       </div>
 
-                                      <div style={{ display: 'flex', gap: '12px' }}>
-                                        {/* Room Thumbnail Preview */}
-                                        <div style={{
-                                          width: '84px',
-                                          height: '56px',
-                                          borderRadius: '8px',
-                                          background: '#070913',
-                                          border: '1px solid rgba(255,255,255,0.12)',
-                                          overflow: 'hidden',
-                                          flexShrink: 0,
-                                          position: 'relative',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center'
-                                        }}>
-                                          {thumbUrl ? (
-                                            <img
-                                              src={thumbUrl}
-                                              alt={selectedLoc.name}
-                                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                            />
-                                          ) : (
-                                            <span style={{ fontSize: '1.2rem' }}>🌐</span>
-                                          )}
+                                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                        {/* Room Thumbnail Preview with Direct Upload Button */}
+                                        <div style={{ position: 'relative', flexShrink: 0 }}>
                                           <div style={{
-                                            position: 'absolute',
-                                            bottom: '2px',
-                                            right: '2px',
-                                            background: 'rgba(0,0,0,0.75)',
-                                            padding: '1px 4px',
-                                            borderRadius: '4px',
-                                            fontSize: '0.6rem',
-                                            color: '#ffffff',
-                                            fontWeight: 600
+                                            width: '90px',
+                                            height: '60px',
+                                            borderRadius: '8px',
+                                            background: '#070913',
+                                            border: '1px solid rgba(255,255,255,0.15)',
+                                            overflow: 'hidden',
+                                            position: 'relative',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
                                           }}>
-                                            360°
+                                            {thumbUrl ? (
+                                              <img
+                                                src={thumbUrl}
+                                                alt={selectedLoc.name}
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                              />
+                                            ) : (
+                                              <span style={{ fontSize: '1.2rem' }}>🌐</span>
+                                            )}
                                           </div>
+
+                                          {/* Direct Thumbnail Change Button */}
+                                          <label
+                                            style={{
+                                              position: 'absolute',
+                                              bottom: '-4px',
+                                              right: '-4px',
+                                              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                                              border: '1px solid #ffffff',
+                                              borderRadius: '6px',
+                                              padding: '2px 6px',
+                                              color: '#ffffff',
+                                              fontSize: '0.65rem',
+                                              fontWeight: 700,
+                                              cursor: 'pointer',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '3px',
+                                              boxShadow: '0 2px 8px rgba(0,0,0,0.6)',
+                                              zIndex: 10
+                                            }}
+                                            title="Upload or Change Room Thumbnail Photo"
+                                          >
+                                            <Camera size={11} />
+                                            <span>Edit</span>
+                                            <input
+                                              type="file"
+                                              accept="image/*"
+                                              onChange={(e) => handleUploadTargetRoomThumbnail(selectedLoc.id, e)}
+                                              hidden
+                                            />
+                                          </label>
                                         </div>
 
                                         {/* Room Meta Information */}
@@ -2318,6 +2367,12 @@ export default function App() {
                                         <span style={{ fontSize: '0.68rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#e9d5ff' }}>
                                           📍 {selectedLoc.hotspots?.length || 0} Hotspots
                                         </span>
+
+                                        {selectedLoc.thumbnailPath && (
+                                          <span style={{ fontSize: '0.68rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#6ee7b7' }}>
+                                            ✓ Custom Thumbnail Active
+                                          </span>
+                                        )}
 
                                         <span style={{ fontSize: '0.68rem', padding: '3px 8px', borderRadius: '6px', background: selectedLoc.isPublic !== false ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)', border: selectedLoc.isPublic !== false ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)', color: selectedLoc.isPublic !== false ? '#6ee7b7' : '#fde68a' }}>
                                           {selectedLoc.isPublic !== false ? '🌐 Public' : '🔒 Private'}
