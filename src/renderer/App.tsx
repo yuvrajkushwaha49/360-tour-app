@@ -32,7 +32,8 @@ import {
   ArrowLeft,
   Home,
   Archive,
-  Sliders
+  Sliders,
+  Camera
 } from 'lucide-react';
 import Viewer360 from './components/Viewer360';
 import LoginModal from './components/LoginModal';
@@ -101,6 +102,8 @@ interface LocationItem {
   stitchedPanoPath: string | null;
   hotspots: HotspotItem[];
   adjustments?: ImageAdjustments;
+  thumbnailPath?: string | null;
+  thumbnailUrl?: string | null;
 }
 
 export default function App() {
@@ -289,6 +292,8 @@ export default function App() {
   const [modalLocIsPublic, setModalLocIsPublic] = useState<boolean>(true);
   const [modalLocUserId, setModalLocUserId] = useState<string>('');
   const [modalLocDesc, setModalLocDesc] = useState<string>('');
+  const [modalLocThumbnailUrl, setModalLocThumbnailUrl] = useState<string>('');
+  const [isUploadingModalThumb, setIsUploadingModalThumb] = useState<boolean>(false);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
@@ -620,6 +625,7 @@ export default function App() {
     setModalLocIsPublic(crmProjectIsPublic);
     setModalLocUserId('');
     setModalLocDesc('');
+    setModalLocThumbnailUrl('');
     setShowLocationModal(true);
 
     if (authToken) {
@@ -644,6 +650,7 @@ export default function App() {
     setModalLocIsPublic(crmProjectIsPublic ? (loc.isPublic !== undefined ? loc.isPublic : true) : false);
     setModalLocUserId(loc.assignedUserId || '');
     setModalLocDesc(loc.description || '');
+    setModalLocThumbnailUrl(loc.thumbnailPath || loc.thumbnailUrl || '');
     setShowLocationModal(true);
 
     if (authToken) {
@@ -658,6 +665,31 @@ export default function App() {
       } catch (err) {
         console.error('Failed to fetch clients list:', err);
       }
+    }
+  };
+
+  const handleUploadModalLocationThumbnail = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingModalThumb(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const resData = await uploadFileWithFallback(
+        `${API_BASE_URL}/api/upload`,
+        formData,
+        authToken ? { Authorization: `Bearer ${authToken}` } : {}
+      );
+
+      if (resData && resData.url) {
+        setModalLocThumbnailUrl(resData.url);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to upload location thumbnail');
+    } finally {
+      setIsUploadingModalThumb(false);
     }
   };
 
@@ -676,7 +708,9 @@ export default function App() {
             isPublic: modalLocIsPublic,
             assignedUserId: !modalLocIsPublic ? modalLocUserId : undefined,
             assignedUserName: !modalLocIsPublic ? assignedName : undefined,
-            description: modalLocDesc.trim() || undefined
+            description: modalLocDesc.trim() || undefined,
+            thumbnailPath: modalLocThumbnailUrl.trim() || undefined,
+            thumbnailUrl: modalLocThumbnailUrl.trim() || undefined
           }
           : loc
       ));
@@ -690,6 +724,8 @@ export default function App() {
         assignedUserId: !modalLocIsPublic ? modalLocUserId : undefined,
         assignedUserName: !modalLocIsPublic ? assignedName : undefined,
         description: modalLocDesc.trim() || undefined,
+        thumbnailPath: modalLocThumbnailUrl.trim() || undefined,
+        thumbnailUrl: modalLocThumbnailUrl.trim() || undefined,
         directions: { F: [], B: [], L: [], R: [], U: [], D: [] },
         gridConfigs: { F: 'auto', B: 'auto', L: 'auto', R: 'auto', U: 'auto', D: 'auto' },
         stitchedPanoPath: null,
@@ -3056,7 +3092,7 @@ export default function App() {
             </div>
 
             {/* Optional Description */}
-            <div style={{ marginBottom: '22px' }}>
+            <div style={{ marginBottom: '18px' }}>
               <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', marginBottom: '6px' }}>
                 Description / Notes (Optional)
               </label>
@@ -3073,6 +3109,77 @@ export default function App() {
                   boxSizing: 'border-box',
                 }}
               />
+            </div>
+
+            {/* Custom Room Thumbnail Photo (for Quick Explore & Overlays) */}
+            <div style={{ marginBottom: '22px', background: 'rgba(255, 255, 255, 0.03)', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', margin: 0 }}>
+                  🖼️ Custom Room Thumbnail Photo (Quick Explore)
+                </label>
+                {modalLocThumbnailUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setModalLocThumbnailUrl('')}
+                    style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    ✕ Remove
+                  </button>
+                )}
+              </div>
+
+              {modalLocThumbnailUrl ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', background: 'rgba(0,0,0,0.4)', borderRadius: '10px', border: '1px solid rgba(99,102,241,0.4)' }}>
+                  <img
+                    src={modalLocThumbnailUrl.startsWith('http') || modalLocThumbnailUrl.startsWith('data:') ? toCloudFrontUrl(modalLocThumbnailUrl) : `${API_BASE_URL}${modalLocThumbnailUrl.startsWith('/') ? '' : '/'}${modalLocThumbnailUrl}`}
+                    alt="Custom Room Thumbnail"
+                    style={{ width: '56px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)' }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>✓ Custom Thumbnail Active</div>
+                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {modalLocThumbnailUrl}
+                    </div>
+                  </div>
+                  <label style={{
+                    background: 'rgba(99, 102, 241, 0.2)',
+                    border: '1px solid rgba(99, 102, 241, 0.5)',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    color: '#c7d2fe',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    <Camera size={12} />
+                    <span>Change</span>
+                    <input type="file" accept="image/*" onChange={handleUploadModalLocationThumbnail} hidden />
+                  </label>
+                </div>
+              ) : (
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  border: '1px dashed rgba(99, 102, 241, 0.45)',
+                  background: 'rgba(99, 102, 241, 0.05)',
+                  color: '#c7d2fe',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}>
+                  <Camera size={16} className="text-indigo-400" />
+                  <span>{isUploadingModalThumb ? 'Uploading Thumbnail...' : 'Upload Custom Thumbnail Photo'}</span>
+                  <input type="file" accept="image/*" onChange={handleUploadModalLocationThumbnail} hidden />
+                </label>
+              )}
             </div>
 
             {/* Actions */}

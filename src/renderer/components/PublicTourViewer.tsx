@@ -42,7 +42,9 @@ import {
   FileDown,
   FolderDown,
   File,
-  ExternalLink
+  ExternalLink,
+  Camera,
+  Loader2
 } from 'lucide-react';
 import Viewer360, { Viewer360Ref } from './Viewer360';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
@@ -122,6 +124,9 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [dlCategoryFilter, setDlCategoryFilter] = useState<string>('all');
   const [isUploadingDlFile, setIsUploadingDlFile] = useState<boolean>(false);
   const [isSavingDownload, setIsSavingDownload] = useState<boolean>(false);
+
+  // Quick Explore Thumbnail Upload State
+  const [uploadingThumbnailLocId, setUploadingThumbnailLocId] = useState<string | null>(null);
 
   // Check if current logged-in user is admin
   const currentUser = (() => {
@@ -660,6 +665,61 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     }
   };
 
+  // Upload Custom Room / Location Thumbnail Handler
+  const handleUploadLocationThumbnail = async (locId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingThumbnailLocId(locId);
+    try {
+      const token = localStorage.getItem('crm_token') || localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const resData = await uploadFileWithFallback(
+        `${API_BASE_URL}/api/upload`,
+        formData,
+        token ? { Authorization: `Bearer ${token}` } : {}
+      );
+
+      if (resData && resData.url) {
+        const updatedLocations = (tourData?.locations || []).map((loc: any) => {
+          if (loc.id === locId) {
+            return {
+              ...loc,
+              thumbnailPath: resData.url,
+              thumbnailUrl: resData.url
+            };
+          }
+          return loc;
+        });
+
+        const updatedTourData = {
+          ...(tourData || {}),
+          locations: updatedLocations
+        };
+
+        await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : ''
+          },
+          body: JSON.stringify({
+            name: tourName,
+            data: updatedTourData
+          })
+        });
+
+        setTourData(updatedTourData);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to upload location thumbnail');
+    } finally {
+      setUploadingThumbnailLocId(null);
+    }
+  };
+
   const copyShareLink = () => {
     const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
     const url = `${base}/api/tours/${tourId}`;
@@ -1093,9 +1153,16 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                 const isActive = loc.id === activeLocationId;
                 const paddedNum = String(idx + 1).padStart(2, '0');
 
-                // Determine thumbnail image
+                const isUploadingThisThumb = uploadingThumbnailLocId === loc.id;
+
+                // Determine thumbnail image (custom uploaded thumbnail > stitched pano > direction face)
                 let thumbSrc = '';
-                if (loc.stitchedPanoPath) {
+                if (loc.thumbnailPath || loc.thumbnailUrl || loc.thumb) {
+                  const t = loc.thumbnailPath || loc.thumbnailUrl || loc.thumb;
+                  thumbSrc = t.startsWith('http') || t.startsWith('data:')
+                    ? toCloudFrontUrl(t)
+                    : `${API_BASE_URL}${t.startsWith('/') ? '' : '/'}${t}`;
+                } else if (loc.stitchedPanoPath) {
                   thumbSrc = loc.stitchedPanoPath.startsWith('http') || loc.stitchedPanoPath.startsWith('data:')
                     ? toCloudFrontUrl(loc.stitchedPanoPath)
                     : `${API_BASE_URL}${loc.stitchedPanoPath.startsWith('/') ? '' : '/'}${loc.stitchedPanoPath}`;
@@ -1117,6 +1184,41 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                       <img src={thumbSrc} alt={loc.name} className="smart-thumb-img" />
                     ) : (
                       <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #1e1b4b, #0f172a)' }} />
+                    )}
+
+                    {/* Admin Upload Thumbnail Button */}
+                    {isAdmin && (
+                      <label
+                        onClick={(e) => e.stopPropagation()}
+                        className="smart-thumb-upload-btn"
+                        title={`Upload custom thumbnail photo for ${loc.name}`}
+                      >
+                        <Camera size={12} />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleUploadLocationThumbnail(loc.id, e)}
+                          hidden
+                        />
+                      </label>
+                    )}
+
+                    {/* Uploading Loading Indicator */}
+                    {isUploadingThisThumb && (
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'rgba(0, 0, 0, 0.75)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        zIndex: 15
+                      }}>
+                        <Loader2 size={16} className="animate-spin text-indigo-400" />
+                        <span style={{ fontSize: '0.55rem', color: '#c7d2fe', fontWeight: 700 }}>Uploading</span>
+                      </div>
                     )}
 
                     <div className="smart-thumb-overlay">
