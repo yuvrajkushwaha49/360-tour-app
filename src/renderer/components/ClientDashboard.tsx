@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Compass,
   Share2,
+  Check,
   Lock,
   Globe,
   Trash2,
@@ -381,7 +382,8 @@ export default function ClientDashboard({
 
   const copyShareLink = (tourId: string) => {
     const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
-    const url = `${base}/api/tours/${tourId}`;
+    const expiresAt = Date.now() + 5 * 60 * 1000;
+    const url = `${base}/?tourId=${tourId}&exp=${expiresAt}`;
     navigator.clipboard.writeText(url);
     setCopiedId(tourId);
     setTimeout(() => setCopiedId(null), 2500);
@@ -921,7 +923,7 @@ export default function ClientDashboard({
                                   className="btn btn-sm btn-outline-secondary p-2 rounded-3"
                                   title="Copy Share Link"
                                 >
-                                  <Share2 className="w-3.5 h-3.5" />
+                                  {copiedId === project.id ? <Check className="w-3.5 h-3.5 text-success" /> : <Share2 className="w-3.5 h-3.5" />}
                                 </button>
 
                                 <button

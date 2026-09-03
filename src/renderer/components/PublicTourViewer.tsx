@@ -20,9 +20,7 @@ import {
   Star,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   RotateCw,
-  Target,
   Minus,
   Upload,
   Trash2,
@@ -35,9 +33,7 @@ import {
   Navigation,
   Anchor,
   Clock,
-  MapPin,
   Plus,
-  Filter,
   Download,
   FileDown,
   FolderDown,
@@ -45,7 +41,8 @@ import {
   ExternalLink,
   Camera,
   Loader2,
-  Save
+  Save,
+  Copy
 } from 'lucide-react';
 import Viewer360, { Viewer360Ref } from './Viewer360';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
@@ -86,11 +83,43 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(false);
-  const [copied, setCopied] = useState<boolean>(false);
   const [rightSidebarOpen, setRightSidebarOpen] = useState<boolean>(() => {
-    const saved = localStorage.getItem('tour_right_sidebar_open');
-    return saved !== null ? saved === 'true' : true;
+    try {
+      const saved = localStorage.getItem('tour_right_sidebar_open');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
   });
+
+  // Temporary 5-Minute Share Link Expiration State
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const exp = urlParams.get('exp') || urlParams.get('expires');
+      if (exp) {
+        const diff = Math.floor((Number(exp) - Date.now()) / 1000);
+        return diff;
+      }
+    } catch (e) { }
+    return null;
+  });
+
+  const [isLinkExpired, setIsLinkExpired] = useState<boolean>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const exp = urlParams.get('exp') || urlParams.get('expires');
+      if (exp) {
+        return Date.now() > Number(exp);
+      }
+    } catch (e) { }
+    return false;
+  });
+
+  // Admin Manual Share Modal States
+  const [showShareModal, setShowShareModal] = useState<boolean>(false);
+  const [shareMinutes, setShareMinutes] = useState<number>(5);
+  const [shareLinkCopied, setShareLinkCopied] = useState<boolean>(false);
 
   // Master Plan States
   const [isEditingMasterPlan, setIsEditingMasterPlan] = useState<boolean>(false);
@@ -163,22 +192,73 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [activeNavTab, setActiveNavTab] = useState<string>('overview');
   const [timeOfDay, setTimeOfDay] = useState<'day' | 'sunset' | 'night'>('day');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
-    const saved = localStorage.getItem('tour_left_sidebar_open');
-    return saved !== null ? saved === 'true' : true;
+    try {
+      const saved = localStorage.getItem('tour_left_sidebar_open');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
   });
-  const [autoRotate, setAutoRotate] = useState<boolean>(false);
+  const [autoRotate, setAutoRotate] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('tour_auto_rotate');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const carouselScrollRef = useRef<HTMLDivElement>(null);
   const viewer360Ref = useRef<Viewer360Ref>(null);
 
-  // Sync sidebar open/close state to localStorage so it stays persistent on reload
+  // Sync autoRotate state to localStorage
   useEffect(() => {
-    localStorage.setItem('tour_left_sidebar_open', String(sidebarOpen));
+    try {
+      localStorage.setItem('tour_auto_rotate', JSON.stringify(autoRotate));
+    } catch (e) {
+      console.warn('Failed to save autoRotate state to localStorage', e);
+    }
+  }, [autoRotate]);
+
+  // Sync sidebar open/close state to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('tour_left_sidebar_open', JSON.stringify(sidebarOpen));
+    } catch (e) {
+      console.warn('Failed to save sidebarOpen state to localStorage', e);
+    }
   }, [sidebarOpen]);
 
   useEffect(() => {
-    localStorage.setItem('tour_right_sidebar_open', String(rightSidebarOpen));
+    try {
+      localStorage.setItem('tour_right_sidebar_open', JSON.stringify(rightSidebarOpen));
+    } catch (e) {
+      console.warn('Failed to save rightSidebarOpen state to localStorage', e);
+    }
   }, [rightSidebarOpen]);
+
+  // Countdown interval for temporary share link (5 minutes)
+  useEffect(() => {
+    if (isAdmin || remainingSeconds === null) return;
+
+    if (remainingSeconds <= 0) {
+      setIsLinkExpired(true);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setRemainingSeconds(prev => {
+        if (prev === null || prev <= 1) {
+          setIsLinkExpired(true);
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isAdmin, remainingSeconds]);
 
   const handleLocationChange = (locId: string) => {
     setActiveLocationId(locId);
@@ -458,12 +538,12 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         updatedList = connectivityList.map(item =>
           item.id === editingConnItem.id
             ? {
-                ...item,
-                title: connFormTitle.trim(),
-                category: connFormCategory,
-                distance: connFormDistance.trim(),
-                description: connFormDesc.trim()
-              }
+              ...item,
+              title: connFormTitle.trim(),
+              category: connFormCategory,
+              distance: connFormDistance.trim(),
+              description: connFormDesc.trim()
+            }
             : item
         );
       } else {
@@ -612,14 +692,14 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         updatedList = downloadsList.map(item =>
           item.id === editingDownloadItem.id
             ? {
-                ...item,
-                title: dlFormTitle.trim(),
-                category: dlFormCategory,
-                fileUrl: dlFormFileUrl.trim(),
-                fileSize: dlFormFileSize.trim() || '2.5 MB',
-                fileType: dlFormFileType.trim() || 'PDF',
-                description: dlFormDesc.trim()
-              }
+              ...item,
+              title: dlFormTitle.trim(),
+              category: dlFormCategory,
+              fileUrl: dlFormFileUrl.trim(),
+              fileSize: dlFormFileSize.trim() || '2.5 MB',
+              fileType: dlFormFileType.trim() || 'PDF',
+              description: dlFormDesc.trim()
+            }
             : item
         );
       } else {
@@ -772,17 +852,17 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       const updatedHotspots = (currentLocation.hotspots || []).map((h: any) =>
         h.id === editingHotspot.id
           ? {
-              ...h,
-              name: editHotspotName.trim() || h.name,
-              subtitle: editHotspotSubtitle.trim() || undefined,
-              category: editHotspotCategory || undefined,
-              targetLocationId: editHotspotTargetId || undefined,
-              beaconColor: editHotspotBeaconColor || '#a855f7',
-              customIconUrl: editHotspotCustomIconUrl || undefined,
-              area: editHotspotArea.trim() || undefined,
-              description: editHotspotDesc.trim() || undefined,
-              isPublic: editHotspotIsPublic
-            }
+            ...h,
+            name: editHotspotName.trim() || h.name,
+            subtitle: editHotspotSubtitle.trim() || undefined,
+            category: editHotspotCategory || undefined,
+            targetLocationId: editHotspotTargetId || undefined,
+            beaconColor: editHotspotBeaconColor || '#a855f7',
+            customIconUrl: editHotspotCustomIconUrl || undefined,
+            area: editHotspotArea.trim() || undefined,
+            description: editHotspotDesc.trim() || undefined,
+            isPublic: editHotspotIsPublic
+          }
           : h
       );
 
@@ -919,12 +999,24 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     }
   };
 
-  const copyShareLink = () => {
+  const getGeneratedShareUrl = () => {
     const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
-    const url = `${base}/api/tours/${tourId}`;
+    if (shareMinutes <= 0) {
+      return `${base}/?tourId=${tourId}`;
+    }
+    const expiresAt = Date.now() + shareMinutes * 60 * 1000;
+    return `${base}/?tourId=${tourId}&exp=${expiresAt}`;
+  };
+
+  const handleCopyShareModalLink = () => {
+    const url = getGeneratedShareUrl();
     navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setShareLinkCopied(true);
+    setTimeout(() => setShareLinkCopied(false), 2500);
+  };
+
+  const copyShareLink = () => {
+    setShowShareModal(true);
   };
 
   const toggleFullscreen = () => {
@@ -949,6 +1041,72 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       canvasEl.dispatchEvent(new WheelEvent('wheel', { deltaY, bubbles: true }));
     }
   };
+
+  // Temporary 5-Minute Link Expired Screen (Clients/Visitors only)
+  if (isLinkExpired && !isAdmin) {
+    return (
+      <div className="public-viewer-page d-flex flex-column align-items-center justify-content-center text-white p-4 text-center" style={{ background: '#050713' }}>
+        <div style={{
+          width: '80px',
+          height: '80px',
+          borderRadius: '50%',
+          background: 'rgba(239, 68, 68, 0.15)',
+          border: '2px solid rgba(239, 68, 68, 0.4)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#f87171',
+          marginBottom: '20px',
+          boxShadow: '0 0 30px rgba(239, 68, 68, 0.25)'
+        }}>
+          <Clock size={40} />
+        </div>
+
+        <span style={{
+          background: 'rgba(239, 68, 68, 0.2)',
+          border: '1px solid rgba(239, 68, 68, 0.4)',
+          color: '#fca5a5',
+          fontSize: '0.75rem',
+          fontWeight: 700,
+          padding: '4px 14px',
+          borderRadius: '20px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          marginBottom: '14px'
+        }}>
+          ⏰ Share Link Expired
+        </span>
+
+        <h2 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#ffffff', marginBottom: '10px' }}>
+          This 5-Minute Share Link Has Expired
+        </h2>
+        <p style={{ fontSize: '0.88rem', color: '#94a3b8', maxWidth: '440px', lineHeight: 1.6, marginBottom: '24px' }}>
+          For privacy and security, temporary preview links are valid for 5 minutes. Please contact the administrator for a fresh link or sign in with authorized credentials.
+        </p>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={onBack}
+            className="btn btn-secondary rounded-3 px-4 py-2.5 small font-weight-normal d-flex align-items-center gap-2 shadow-sm"
+          >
+            <ArrowLeft size={16} />
+            <span>Back to Dashboard</span>
+          </button>
+
+          {onLogin && (
+            <button
+              onClick={onLogin}
+              className="btn btn-primary rounded-3 px-4 py-2.5 small font-weight-normal d-flex align-items-center gap-2 shadow-sm"
+              style={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', border: 'none' }}
+            >
+              <ShieldCheck size={16} />
+              <span>Sign In</span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -1069,12 +1227,12 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   // Locations sorted: Private locations FIRST, then Public locations (without mentioning private/public labels)
   const sortedLocations = (locations && locations.length > 0)
     ? [...locations].sort((a: any, b: any) => {
-        const aIsPrivate = a.isPublic === false || a.isPrivate === true || a.access === 'private';
-        const bIsPrivate = b.isPublic === false || b.isPrivate === true || b.access === 'private';
-        if (aIsPrivate && !bIsPrivate) return -1;
-        if (!aIsPrivate && bIsPrivate) return 1;
-        return 0;
-      })
+      const aIsPrivate = a.isPublic === false || a.isPrivate === true || a.access === 'private';
+      const bIsPrivate = b.isPublic === false || b.isPrivate === true || b.access === 'private';
+      if (aIsPrivate && !bIsPrivate) return -1;
+      if (!aIsPrivate && bIsPrivate) return 1;
+      return 0;
+    })
     : [];
 
   // Calculate dynamic adjustments based on Time-of-Day mode
@@ -1214,18 +1372,43 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             }}
             title={rightSidebarOpen ? "Close Locations Navbar" : "Open Locations Navbar"}
           >
-            <Compass size={16} className={rightSidebarOpen ? 'text-indigo-300' : ''} />
+            {rightSidebarOpen ? <X size={16} /> : <Menu size={16} />}
           </button>
 
-          {/* Share Button */}
-          <button
-            onClick={copyShareLink}
-            className="smart-tool-btn"
-            style={{ width: '2.25rem', height: '2.25rem' }}
-            title="Share Tour Link"
-          >
-            {copied ? <Check size={15} className="text-emerald-400" /> : <Share2 size={15} />}
-          </button>
+          {/* Share Button (Admin Only) */}
+          {isAdmin && (
+            <button
+              onClick={copyShareLink}
+              className="smart-tool-btn"
+              style={{ width: '2.25rem', height: '2.25rem' }}
+              title="Share Tour (Set Active Duration)"
+            >
+              <Share2 size={15} />
+            </button>
+          )}
+
+          {/* Temporary Link Validity Countdown Pill (for shared clients) */}
+          {!isAdmin && remainingSeconds !== null && remainingSeconds > 0 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '20px',
+              background: remainingSeconds < 60 ? 'rgba(239, 68, 68, 0.25)' : 'rgba(99, 102, 241, 0.22)',
+              border: remainingSeconds < 60 ? '1px solid rgba(239, 68, 68, 0.5)' : '1px solid rgba(99, 102, 241, 0.4)',
+              color: remainingSeconds < 60 ? '#fca5a5' : '#c7d2fe',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              letterSpacing: '0.02em',
+              boxShadow: remainingSeconds < 60 ? '0 0 10px rgba(239, 68, 68, 0.35)' : 'none'
+            }} title="Temporary share link validity remaining">
+              <Clock size={12} className={remainingSeconds < 60 ? 'spin' : ''} />
+              <span>
+                {Math.floor(remainingSeconds / 60)}:{(remainingSeconds % 60).toString().padStart(2, '0')}
+              </span>
+            </div>
+          )}
 
           {/* Fullscreen Toggle */}
           <button
@@ -1341,13 +1524,60 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         </div>
       </div>
 
-      {/* Right Collapsible Glassmorphic Sidebar (Fixed to Right Side) */}
+      {/* Right Collapsible Glassmorphic Navbar (All Locations: Private First, then Public - No labels mentioned) */}
       <div className={`smart-portal-right-sidebar ${rightSidebarOpen ? 'open' : 'collapsed'}`}>
-        <div className="smart-sidebar-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>ALL LOCATIONS</span>
-          <span style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 600, background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: '10px' }}>
-            {sortedLocations.length} SPACES
-          </span>
+        {/* Header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingBottom: '12px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+          marginBottom: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '8px',
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))',
+              border: '1px solid rgba(99, 102, 241, 0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#a5b4fc'
+            }}>
+              <Compass size={15} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.04em' }}>
+                ALL LOCATIONS
+              </div>
+              <div style={{ fontSize: '0.64rem', color: '#94a3b8' }}>
+                {sortedLocations.length} Interactive Spaces
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setRightSidebarOpen(false)}
+            style={{
+              width: '26px',
+              height: '26px',
+              borderRadius: '8px',
+              background: 'rgba(255, 255, 255, 0.06)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              color: '#94a3b8',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+            title="Close List"
+          >
+            <X size={14} />
+          </button>
         </div>
 
         {/* Locations List Items */}
@@ -1360,15 +1590,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           flex: 1,
           scrollbarWidth: 'thin'
         }}>
-          {sortedLocations.map((loc: any, idx: number) => {
+          {sortedLocations.map((loc: any) => {
             const isCurrent = currentLocation?.id === loc.id;
-            const thumb = (loc.thumbnailPath || loc.thumbnailUrl)
-              ? toCloudFrontUrl(loc.thumbnailPath || loc.thumbnailUrl)
-              : loc.stitchedPanoPath
-                ? toCloudFrontUrl(loc.stitchedPanoPath)
-                : (loc.directions?.F?.[0]?.path || (Object.values(loc.directions || {}).flat() as any)[0]?.path)
-                  ? toCloudFrontUrl(loc.directions?.F?.[0]?.path || (Object.values(loc.directions || {}).flat() as any)[0]?.path)
-                  : '';
 
             return (
               <div
@@ -1377,14 +1600,15 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                 style={{
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'space-between',
                   gap: '10px',
-                  padding: '7px 9px',
+                  padding: '10px 14px',
                   borderRadius: '12px',
                   background: isCurrent
-                    ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.35) 0%, rgba(168, 85, 247, 0.25) 100%)'
+                    ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.4) 0%, rgba(168, 85, 247, 0.3) 100%)'
                     : 'rgba(255, 255, 255, 0.03)',
                   border: isCurrent
-                    ? '1px solid rgba(99, 102, 241, 0.7)'
+                    ? '1px solid rgba(99, 102, 241, 0.75)'
                     : '1px solid rgba(255, 255, 255, 0.07)',
                   boxShadow: isCurrent
                     ? '0 4px 16px rgba(99, 102, 241, 0.35)'
@@ -1408,46 +1632,20 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                   }
                 }}
               >
-                {/* Thumbnail */}
-                <div style={{
-                  width: '60px',
-                  height: '40px',
-                  borderRadius: '8px',
-                  overflow: 'hidden',
-                  background: '#070913',
-                  border: isCurrent ? '1px solid #818cf8' : '1px solid rgba(255, 255, 255, 0.15)',
-                  flexShrink: 0,
-                  position: 'relative'
-                }}>
-                  {thumb ? (
-                    <img
-                      src={thumb}
-                      alt={loc.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>
-                      🌐
-                    </div>
-                  )}
-                  {isCurrent && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '3px',
-                      left: '3px',
-                      width: '6px',
-                      height: '6px',
-                      borderRadius: '50%',
-                      background: '#10b981',
-                      boxShadow: '0 0 6px #10b981'
-                    }} />
-                  )}
-                </div>
-
-                {/* Details */}
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                  {/* Glowing Indicator Dot */}
                   <div style={{
-                    fontSize: '0.8rem',
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: isCurrent ? '#818cf8' : 'rgba(255, 255, 255, 0.35)',
+                    boxShadow: isCurrent ? '0 0 10px #818cf8' : 'none',
+                    flexShrink: 0
+                  }} />
+
+                  {/* Hotspot / Location Name Only */}
+                  <span style={{
+                    fontSize: '0.84rem',
                     fontWeight: isCurrent ? 800 : 600,
                     color: isCurrent ? '#ffffff' : '#e2e8f0',
                     overflow: 'hidden',
@@ -1455,27 +1653,15 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                     whiteSpace: 'nowrap'
                   }}>
                     {loc.name}
-                  </div>
-                  <div style={{
-                    fontSize: '0.67rem',
-                    color: isCurrent ? '#a5b4fc' : '#94a3b8',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    marginTop: '2px'
-                  }}>
-                    <span>{isCurrent ? 'Viewing Now' : `Space #${idx + 1}`}</span>
-                    {loc.hotspots && loc.hotspots.length > 0 && (
-                      <span>• {loc.hotspots.length} hotspots</span>
-                    )}
-                  </div>
+                  </span>
                 </div>
 
-                {/* Chevron */}
+                {/* Arrow Icon */}
                 <div style={{
-                  color: isCurrent ? '#818cf8' : '#64748b',
+                  color: isCurrent ? '#c7d2fe' : '#64748b',
                   display: 'flex',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  flexShrink: 0
                 }}>
                   <ChevronRight size={14} />
                 </div>
@@ -1489,7 +1675,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       <div className="public-viewer-canvas" id="viewer-canvas-container">
         <Viewer360
           ref={viewer360Ref}
-          readOnly={!isAdmin}
+          readOnly={true}
           directions={currentLocation?.directions || { F: [], B: [], L: [], R: [], U: [], D: [] }}
           gridConfigs={currentLocation?.gridConfigs || {}}
           hotspots={currentLocation?.hotspots || []}
@@ -1611,57 +1797,34 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         </div>
       )}
 
-      {/* Bottom Center Floating Toolbar */}
-      <div className="smart-bottom-toolbar">
-        <button
-          className="smart-tool-btn"
-          onClick={() => handleZoom('out')}
-          title="Zoom Out (-)"
-        >
-          <Minus size={15} />
-        </button>
-
-        <button
-          className="smart-tool-btn"
-          onClick={() => {
-            const canvasEl = document.getElementById('viewer-canvas-container');
-            if (canvasEl) {
-              const resetBtn = canvasEl.querySelector('button[title*="Reset"], button[title*="Center"]');
-              if (resetBtn) (resetBtn as HTMLElement).click();
-            }
-          }}
-          title="Reset View"
-        >
-          <Target size={15} />
-        </button>
-
-        <button
-          className={`smart-tool-btn ${autoRotate ? 'active-360' : ''}`}
-          onClick={() => setAutoRotate(!autoRotate)}
-          title="Toggle 360° Auto-Rotation"
-        >
-          <RotateCw size={15} />
-        </button>
-
-        <button
-          className="smart-tool-btn"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          title="Toggle Zone & Master Plan"
-        >
-          <Map size={15} />
-        </button>
-
-        <button
-          className="smart-tool-btn"
-          onClick={() => handleZoom('in')}
-          title="Zoom In (+)"
-        >
-          <Plus size={15} />
-        </button>
-      </div>
-
-      {/* Bottom Right Realistic 3D Compass & Zoom Controls */}
+      {/* Bottom Right Realistic 3D Compass & Controls (Zoom + Autoplay + Compass) */}
       <div className="smart-compass-widget">
+        {/* Autoplay / Auto-Rotate 360 Toggle Button */}
+        <button
+          className={`smart-zoom-btn ${autoRotate ? 'active-360' : ''}`}
+          onClick={() => setAutoRotate(!autoRotate)}
+          title={autoRotate ? "Pause 360° Auto-Rotation" : "Start 360° Auto-Rotation"}
+          style={{
+            width: '2.5rem',
+            height: '2.5rem',
+            borderRadius: '50%',
+            background: autoRotate ? 'linear-gradient(135deg, #6366f1, #a855f7)' : 'rgba(9, 13, 24, 0.85)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: autoRotate ? '1.5px solid rgba(168, 85, 247, 0.8)' : '1px solid rgba(255, 255, 255, 0.15)',
+            boxShadow: autoRotate ? '0 0 16px rgba(99, 102, 241, 0.65)' : '0 4px 14px rgba(0, 0, 0, 0.45)',
+            color: '#ffffff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}
+        >
+          <RotateCw size={15} className={autoRotate ? 'spin' : ''} style={autoRotate ? { animationDuration: '4s' } : undefined} />
+        </button>
+
+        {/* Zoom Controls */}
         <div className="smart-zoom-controls">
           <button className="smart-zoom-btn" onClick={() => handleZoom('in')} title="Zoom In">
             <Plus size={13} />
@@ -1671,6 +1834,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           </button>
         </div>
 
+        {/* Orientation Compass Dial */}
         <div
           className="smart-compass-dial"
           onClick={() => {
@@ -3627,6 +3791,279 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                   <span>{isSavingHotspot ? 'Saving...' : 'Save Changes'}</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Share Duration Modal Popup */}
+      {showShareModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(2, 6, 23, 0.85)',
+            backdropFilter: 'blur(10px)',
+            zIndex: 999999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+          onClick={() => setShowShareModal(false)}
+        >
+          <div
+            style={{
+              background: '#090d1f',
+              border: '1px solid rgba(99, 102, 241, 0.35)',
+              borderRadius: '20px',
+              width: '100%',
+              maxWidth: '460px',
+              padding: '24px',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.7), 0 0 35px rgba(99, 102, 241, 0.2)',
+              position: 'relative',
+              color: '#ffffff'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(168, 85, 247, 0.3))',
+                  border: '1px solid rgba(168, 85, 247, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#c084fc'
+                }}>
+                  <Share2 size={18} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#ffffff' }}>Share Virtual Tour</h4>
+                  <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8' }}>Set active validity duration for client preview</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowShareModal(false)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#94a3b8',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Duration Selector */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '10px' }}>
+                <Clock size={14} className="text-indigo-400" />
+                <span>Link Active Duration:</span>
+              </label>
+
+              {/* Quick Presets */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '12px' }}>
+                {[
+                  { label: '5 Mins', val: 5 },
+                  { label: '15 Mins', val: 15 },
+                  { label: '30 Mins', val: 30 },
+                  { label: '1 Hour', val: 60 },
+                  { label: '24 Hours', val: 1440 },
+                  { label: 'Permanent', val: 0 }
+                ].map(preset => (
+                  <button
+                    key={preset.val}
+                    type="button"
+                    onClick={() => setShareMinutes(preset.val)}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: '10px',
+                      fontSize: '0.76rem',
+                      fontWeight: shareMinutes === preset.val ? 700 : 500,
+                      background: shareMinutes === preset.val
+                        ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(168, 85, 247, 0.35))'
+                        : 'rgba(255, 255, 255, 0.04)',
+                      border: shareMinutes === preset.val
+                        ? '1.5px solid rgba(168, 85, 247, 0.7)'
+                        : '1px solid rgba(255, 255, 255, 0.08)',
+                      color: shareMinutes === preset.val ? '#ffffff' : '#94a3b8',
+                      cursor: 'pointer',
+                      transition: 'all 0.18s ease'
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Minutes Input */}
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '12px',
+                padding: '10px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <span style={{ fontSize: '0.78rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>Custom Minutes:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="43200"
+                  value={shareMinutes === 0 ? '' : shareMinutes}
+                  placeholder="e.g. 10"
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setShareMinutes(isNaN(v) ? 0 : Math.max(0, v));
+                  }}
+                  style={{
+                    flex: 1,
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                    borderRadius: '8px',
+                    color: '#ffffff',
+                    padding: '6px 10px',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
+                    outline: 'none'
+                  }}
+                />
+                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>min</span>
+              </div>
+
+              {/* Expiry summary info badge */}
+              <div style={{
+                marginTop: '10px',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                background: 'rgba(99, 102, 241, 0.12)',
+                border: '1px solid rgba(99, 102, 241, 0.25)',
+                fontSize: '0.74rem',
+                color: '#c7d2fe',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <Clock size={13} className="text-indigo-400" />
+                <span>
+                  {shareMinutes > 0
+                    ? `Link will automatically expire in ${shareMinutes} minute${shareMinutes > 1 ? 's' : ''}`
+                    : 'Permanent link with no expiration time'}
+                </span>
+              </div>
+            </div>
+
+            {/* Generated Link Preview & Copy Button */}
+            <div style={{ marginBottom: '18px' }}>
+              <label style={{ fontSize: '0.76rem', fontWeight: 600, color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                Shareable Link:
+              </label>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                background: 'rgba(0, 0, 0, 0.45)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                borderRadius: '12px',
+                padding: '4px 6px 4px 12px',
+                gap: '8px'
+              }}>
+                <input
+                  type="text"
+                  readOnly
+                  value={getGeneratedShareUrl()}
+                  style={{
+                    flex: 1,
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#94a3b8',
+                    fontSize: '0.76rem',
+                    outline: 'none',
+                    textOverflow: 'ellipsis'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyShareModalLink}
+                  style={{
+                    background: shareLinkCopied ? '#059669' : 'linear-gradient(135deg, #6366f1, #a855f7)',
+                    border: 'none',
+                    color: '#ffffff',
+                    borderRadius: '8px',
+                    padding: '8px 14px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 2px 10px rgba(99, 102, 241, 0.35)'
+                  }}
+                >
+                  {shareLinkCopied ? <Check size={14} /> : <Copy size={14} />}
+                  <span>{shareLinkCopied ? 'Copied!' : 'Copy Link'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Bottom Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setShowShareModal(false)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  color: '#cbd5e1',
+                  borderRadius: '10px',
+                  padding: '9px 18px',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleCopyShareModalLink();
+                  setTimeout(() => setShowShareModal(false), 1000);
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  border: 'none',
+                  color: '#ffffff',
+                  borderRadius: '10px',
+                  padding: '9px 20px',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {shareLinkCopied ? <Check size={15} /> : <Share2 size={15} />}
+                <span>{shareLinkCopied ? 'Link Copied!' : 'Copy & Close'}</span>
+              </button>
             </div>
           </div>
         </div>

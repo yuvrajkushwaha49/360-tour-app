@@ -208,10 +208,21 @@ export default function App() {
   });
   const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem('crm_token'));
   const [activePublicTourId, setActivePublicTourId] = useState<string | null>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tourFromUrl = urlParams.get('tour') || urlParams.get('tourId');
+      if (tourFromUrl) return tourFromUrl;
+    } catch (e) { }
     return localStorage.getItem('active_public_tour_id');
   });
 
   const [activeView, setActiveView] = useState<'studio' | 'crm' | 'public_tour' | 'login'>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tourFromUrl = urlParams.get('tour') || urlParams.get('tourId');
+      if (tourFromUrl) return 'public_tour';
+    } catch (e) { }
+
     const savedUser = localStorage.getItem('crm_user');
     if (!savedUser) return 'login';
 

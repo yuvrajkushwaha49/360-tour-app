@@ -1,5 +1,5 @@
 import { ImageAdjustments, DEFAULT_ADJUSTMENTS, injectAdjustmentsShader } from '../utils/imageAdjustmentEngine';
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
@@ -1623,6 +1623,11 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
   galleryPhotos = []
 }, ref) => {
   const [autoRotate, setAutoRotate] = useState(propAutoRotate);
+
+  useEffect(() => {
+    setAutoRotate(propAutoRotate);
+  }, [propAutoRotate]);
+
   const [heading, setHeading] = useState(0);
   const [imageMissingError, setImageMissingError] = useState<boolean>(false);
   const [countdown, setCountdown] = useState<number>(4);
@@ -2126,115 +2131,97 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
         />
       </Canvas>
 
-      {/* Floating Controls */}
-      <div style={{
-        position: 'absolute',
-        bottom: '24px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        display: 'flex',
-        gap: '8px',
-        background: 'rgba(19, 21, 27, 0.85)',
-        backdropFilter: 'blur(8px)',
-        border: '1px solid var(--border-color)',
-        padding: '8px 16px',
-        borderRadius: '30px',
-        zIndex: 10
-      }}>
-        {/* Hotspot Builder Buttons (Admin Only) */}
-        {!readOnly && (
-          <>
-            {!isPlacingHotspot ? (
-              <>
-                <button
-                  className="btn btn-sm btn-primary"
-                  onClick={() => {
-                    setIsPlacingHotspot(true);
-                    setIsDrawingArea(false);
-                    setDrawingPoints([]);
-                  }}
-                  title="Add Single Point Hotspot (Room Link or Info)"
-                  style={{ borderRadius: '20px' }}
-                >
-                  <PlusCircle size={16} /> + Hotspot
-                </button>
-                <button
-                  className="btn btn-sm btn-primary"
-                  onClick={() => {
-                    setIsPlacingHotspot(true);
-                    setIsDrawingArea(true);
-                    setDrawingPoints([]);
-                  }}
-                  title="Draw Building Area Boundary Outline"
-                  style={{ borderRadius: '20px', background: 'linear-gradient(135deg, #a5b4fc, #6366f1)', border: 'none' }}
-                >
-                  <PlusCircle size={16} /> + Area Outline
-                </button>
-                {onOpenAdjustments && (
-                  <button
-                    className="btn btn-sm"
-                    onClick={onOpenAdjustments}
-                    title="Open Image Adjustments & Filters"
-                    style={{
-                      borderRadius: '20px',
-                      background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
-                      color: '#fff',
-                      border: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      padding: '4px 12px',
-                      fontWeight: 600,
-                      boxShadow: '0 2px 8px rgba(99,102,241,0.3)'
-                    }}
-                  >
-                    <Sliders size={14} /> Adjustments
-                  </button>
-                )}
-              </>
-            ) : (
+      {/* Floating Controls (Admin Only) */}
+      {!readOnly && (
+        <div style={{
+          position: 'absolute',
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          gap: '8px',
+          background: 'rgba(19, 21, 27, 0.85)',
+          backdropFilter: 'blur(8px)',
+          border: '1px solid var(--border-color)',
+          padding: '8px 16px',
+          borderRadius: '30px',
+          zIndex: 10
+        }}>
+          {!isPlacingHotspot ? (
+            <>
               <button
-                className="btn btn-sm btn-danger"
+                className="btn btn-sm btn-primary"
                 onClick={() => {
-                  setIsPlacingHotspot(false);
+                  setIsPlacingHotspot(true);
                   setIsDrawingArea(false);
                   setDrawingPoints([]);
                 }}
-                title="Cancel drawing"
+                title="Add Single Point Hotspot (Room Link or Info)"
                 style={{ borderRadius: '20px' }}
               >
-                <XCircle size={16} /> Cancel
+                <PlusCircle size={16} /> + Hotspot
               </button>
-            )}
-
-            {/* Show Save Area Button when drawing points exist */}
-            {isPlacingHotspot && isDrawingArea && drawingPoints.length > 0 && (
               <button
                 className="btn btn-sm btn-primary"
-                onClick={onSaveAreaOutline}
-                style={{ borderRadius: '20px', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
+                onClick={() => {
+                  setIsPlacingHotspot(true);
+                  setIsDrawingArea(true);
+                  setDrawingPoints([]);
+                }}
+                title="Draw Building Area Boundary Outline"
+                style={{ borderRadius: '20px', background: 'linear-gradient(135deg, #a5b4fc, #6366f1)', border: 'none' }}
               >
-                <CheckCircle size={16} /> Save Area ({drawingPoints.length} pts)
+                <PlusCircle size={16} /> + Area Outline
               </button>
-            )}
+              {onOpenAdjustments && (
+                <button
+                  className="btn btn-sm"
+                  onClick={onOpenAdjustments}
+                  title="Open Image Adjustments & Filters"
+                  style={{
+                    borderRadius: '20px',
+                    background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                    color: '#fff',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '4px 12px',
+                    fontWeight: 600,
+                    boxShadow: '0 2px 8px rgba(99,102,241,0.3)'
+                  }}
+                >
+                  <Sliders size={14} /> Adjustments
+                </button>
+              )}
+            </>
+          ) : (
+            <button
+              className="btn btn-sm btn-danger"
+              onClick={() => {
+                setIsPlacingHotspot(false);
+                setIsDrawingArea(false);
+                setDrawingPoints([]);
+              }}
+              title="Cancel drawing"
+              style={{ borderRadius: '20px' }}
+            >
+              <XCircle size={16} /> Cancel
+            </button>
+          )}
 
-            <div style={{ width: '1px', backgroundColor: 'var(--border-color)', margin: '0 4px' }} />
-          </>
-        )}
-
-        {/* <button className="btn btn-sm" onClick={() => setAutoRotate(!autoRotate)}>
-          {autoRotate ? <Pause size={16} /> : <Play size={16} />}
-        </button>
-        <button className="btn btn-sm" onClick={handleZoomIn}>
-          <ZoomIn size={16} />
-        </button>
-        <button className="btn btn-sm" onClick={handleZoomOut}>
-          <ZoomOut size={16} />
-        </button>
-        <button className="btn btn-sm" onClick={toggleFullscreen}>
-          <Maximize2 size={16} />
-        </button> */}
-      </div>
+          {/* Show Save Area Button when drawing points exist */}
+          {isPlacingHotspot && isDrawingArea && drawingPoints.length > 0 && (
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={onSaveAreaOutline}
+              style={{ borderRadius: '20px', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
+            >
+              <CheckCircle size={16} /> Save Area ({drawingPoints.length} pts)
+            </button>
+          )}
+        </div>
+      )}
 
       {isPlacingHotspot && (
         <div style={{
