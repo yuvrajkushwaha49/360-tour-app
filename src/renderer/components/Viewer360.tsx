@@ -1336,17 +1336,24 @@ export interface Viewer360Ref {
 
 const CameraZoomEffect: React.FC<{ isZooming: boolean; targetPos: [number, number, number] | null; controlsRef: any }> = ({ isZooming, targetPos, controlsRef }) => {
   useFrame(({ camera }) => {
-    if (isZooming && (camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+    if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
       const pCam = camera as THREE.PerspectiveCamera;
-      pCam.fov = THREE.MathUtils.lerp(pCam.fov, 26, 0.04);
-      pCam.updateProjectionMatrix();
+      if (isZooming) {
+        // Mild, gentle cinematic zoom (from 75 to 58 only instead of extreme zoom)
+        pCam.fov = THREE.MathUtils.lerp(pCam.fov, 58, 0.035);
+        pCam.updateProjectionMatrix();
 
-      if (targetPos && controlsRef.current) {
-        const pinVec = new THREE.Vector3(targetPos[0], targetPos[1], targetPos[2]).normalize();
-        const cameraPos = camera.position.clone();
-        const desiredTarget = cameraPos.clone().add(pinVec.multiplyScalar(100));
-        controlsRef.current.target.lerp(desiredTarget, 0.045);
-        controlsRef.current.update();
+        if (targetPos && controlsRef.current) {
+          const pinVec = new THREE.Vector3(targetPos[0], targetPos[1], targetPos[2]).normalize();
+          const cameraPos = camera.position.clone();
+          const desiredTarget = cameraPos.clone().add(pinVec.multiplyScalar(100));
+          controlsRef.current.target.lerp(desiredTarget, 0.045);
+          controlsRef.current.update();
+        }
+      } else if (pCam.fov < 74.5) {
+        // Smoothly restore natural default FOV (75) for the new location
+        pCam.fov = THREE.MathUtils.lerp(pCam.fov, 75, 0.06);
+        pCam.updateProjectionMatrix();
       }
     }
   });

@@ -12,9 +12,6 @@ import {
   Minimize2,
   Menu,
   X,
-  Sun,
-  Sunset,
-  Moon,
   Building2,
   Map,
   Network,
@@ -26,18 +23,34 @@ import {
   ChevronDown,
   RotateCw,
   Target,
-  Plus,
   Minus,
   Upload,
   Trash2,
   Edit3,
   ZoomIn,
-  Info
+  Info,
+  Plane,
+  Train,
+  Car,
+  Navigation,
+  Anchor,
+  Clock,
+  MapPin,
+  Plus,
+  Filter
 } from 'lucide-react';
 import Viewer360, { Viewer360Ref } from './Viewer360';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
 import { ImageAdjustments, DEFAULT_ADJUSTMENTS } from '../utils/imageAdjustmentEngine';
 import { uploadFileWithFallback } from '../utils/uploadWithFallback';
+
+export interface ConnectivityItem {
+  id: string;
+  title: string;
+  category: 'road' | 'rail' | 'air' | 'sea' | 'metro';
+  distance: string;
+  description: string;
+}
 
 interface PublicTourViewerProps {
   tourId: string;
@@ -70,6 +83,17 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [isUploadingGallery, setIsUploadingGallery] = useState<boolean>(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  // Connectivity Network States
+  const [connectivityList, setConnectivityList] = useState<ConnectivityItem[]>([]);
+  const [isEditingConnectivity, setIsEditingConnectivity] = useState<boolean>(false);
+  const [editingConnItem, setEditingConnItem] = useState<ConnectivityItem | null>(null);
+  const [connFormTitle, setConnFormTitle] = useState<string>('');
+  const [connFormCategory, setConnFormCategory] = useState<'road' | 'rail' | 'air' | 'sea' | 'metro'>('road');
+  const [connFormDistance, setConnFormDistance] = useState<string>('');
+  const [connFormDesc, setConnFormDesc] = useState<string>('');
+  const [connCategoryFilter, setConnCategoryFilter] = useState<string>('all');
+  const [isSavingConnectivity, setIsSavingConnectivity] = useState<boolean>(false);
+
   // Check if current logged-in user is admin
   const currentUser = (() => {
     try {
@@ -79,7 +103,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       return null;
     }
   })();
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = currentUser?.role === 'admin' || Boolean(localStorage.getItem('crm_token')) || Boolean(localStorage.getItem('token'));
 
   // Smart City Portal UI States
   const [activeNavTab, setActiveNavTab] = useState<string>('overview');
@@ -153,6 +177,11 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       // Initialize Gallery
       if (data.tourData?.gallery && Array.isArray(data.tourData.gallery)) {
         setGalleryPhotos(data.tourData.gallery);
+      }
+
+      // Initialize Connectivity
+      if (data.tourData?.connectivity && Array.isArray(data.tourData.connectivity)) {
+        setConnectivityList(data.tourData.connectivity);
       }
 
       const locations = data.tourData?.locations || [];
@@ -323,6 +352,119 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       setTourData(updatedTourData);
     } catch (err: any) {
       alert(err.message || 'Failed to delete photo');
+    }
+  };
+
+  // Connectivity Handlers
+  const handleOpenAddConnectivity = () => {
+    setEditingConnItem(null);
+    setConnFormTitle('');
+    setConnFormCategory('road');
+    setConnFormDistance('');
+    setConnFormDesc('');
+    setIsEditingConnectivity(true);
+  };
+
+  const handleOpenEditConnectivity = (item: ConnectivityItem) => {
+    setEditingConnItem(item);
+    setConnFormTitle(item.title);
+    setConnFormCategory(item.category);
+    setConnFormDistance(item.distance || '');
+    setConnFormDesc(item.description || '');
+    setIsEditingConnectivity(true);
+  };
+
+  const handleSaveConnectivityItem = async () => {
+    if (!connFormTitle.trim()) {
+      alert('Please enter a name/title for the connectivity point.');
+      return;
+    }
+
+    setIsSavingConnectivity(true);
+    try {
+      let updatedList: ConnectivityItem[];
+      if (editingConnItem) {
+        updatedList = connectivityList.map(item =>
+          item.id === editingConnItem.id
+            ? {
+                ...item,
+                title: connFormTitle.trim(),
+                category: connFormCategory,
+                distance: connFormDistance.trim(),
+                description: connFormDesc.trim()
+              }
+            : item
+        );
+      } else {
+        const newItem: ConnectivityItem = {
+          id: `conn_${Date.now()}`,
+          title: connFormTitle.trim(),
+          category: connFormCategory,
+          distance: connFormDistance.trim(),
+          description: connFormDesc.trim()
+        };
+        updatedList = [...connectivityList, newItem];
+      }
+
+      const token = localStorage.getItem('crm_token');
+      const updatedTourData = {
+        ...(tourData || {}),
+        connectivity: updatedList
+      };
+
+      await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          name: tourName,
+          data: updatedTourData
+        })
+      });
+
+      setConnectivityList(updatedList);
+      setTourData(updatedTourData);
+      setIsEditingConnectivity(false);
+      setEditingConnItem(null);
+      setConnFormTitle('');
+      setConnFormDistance('');
+      setConnFormDesc('');
+    } catch (err: any) {
+      alert(err.message || 'Failed to save connectivity item');
+    } finally {
+      setIsSavingConnectivity(false);
+    }
+  };
+
+  const handleDeleteConnectivityItem = async (idToDelete: string) => {
+    if (!confirm('Are you sure you want to remove this connectivity item?')) return;
+
+    const updatedList = connectivityList.filter(item => item.id !== idToDelete);
+    try {
+      const token = localStorage.getItem('crm_token');
+      const updatedTourData = {
+        ...(tourData || {}),
+        connectivity: updatedList
+      };
+
+      await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          name: tourName,
+          data: updatedTourData
+        })
+      });
+
+      setConnectivityList(updatedList);
+      setTourData(updatedTourData);
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete connectivity item');
     }
   };
 
@@ -1322,7 +1464,462 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         </div>
       )}
 
-      {/* 3. LIGHTBOX FULLSCREEN PHOTO VIEWER */}
+      {/* 3. CONNECTIVITY & ACCESS NETWORK MODAL OVERLAY */}
+      {activeNavTab === 'connectivity' && (
+        <div className="smart-content-overlay" onClick={() => { if (!isEditingConnectivity) setActiveNavTab('overview'); }}>
+          <div className="smart-content-modal" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="smart-content-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'rgba(99, 102, 241, 0.18)',
+                  border: '1px solid rgba(99, 102, 241, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#818cf8'
+                }}>
+                  <Network size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '0.02em' }}>
+                    CONNECTIVITY & TRANSIT NETWORK
+                  </h3>
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+                    Strategic road, rail, air, metro, and logistics transit corridors for {displayName}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {isAdmin && !isEditingConnectivity && (
+                  <button
+                    onClick={handleOpenAddConnectivity}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                      border: 'none',
+                      color: '#ffffff',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)'
+                    }}
+                  >
+                    <Plus size={14} />
+                    <span>Add Connectivity Hub</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => {
+                    setIsEditingConnectivity(false);
+                    setActiveNavTab('overview');
+                  }}
+                  className="smart-close-btn"
+                  title="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="smart-content-modal-body">
+              {/* Category Filter Pills (when not editing) */}
+              {!isEditingConnectivity && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '1.25rem' }}>
+                  {[
+                    { id: 'all', label: 'All Corridors', icon: Network, count: connectivityList.length },
+                    { id: 'road', label: 'Roadways & Expressways', icon: Car, count: connectivityList.filter(c => c.category === 'road').length },
+                    { id: 'air', label: 'Airports & Flight', icon: Plane, count: connectivityList.filter(c => c.category === 'air').length },
+                    { id: 'rail', label: 'Railways & Trains', icon: Train, count: connectivityList.filter(c => c.category === 'rail').length },
+                    { id: 'metro', label: 'Metro & City Transit', icon: Navigation, count: connectivityList.filter(c => c.category === 'metro').length },
+                    { id: 'sea', label: 'Ports & Maritime', icon: Anchor, count: connectivityList.filter(c => c.category === 'sea').length }
+                  ].map(tab => {
+                    const IconComp = tab.icon;
+                    const isActive = connCategoryFilter === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setConnCategoryFilter(tab.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 14px',
+                          borderRadius: '20px',
+                          fontSize: '0.76rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          background: isActive ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(255, 255, 255, 0.05)',
+                          border: isActive ? '1px solid #818cf8' : '1px solid rgba(255, 255, 255, 0.1)',
+                          color: isActive ? '#ffffff' : '#94a3b8',
+                          boxShadow: isActive ? '0 4px 12px rgba(99, 102, 241, 0.35)' : 'none'
+                        }}
+                      >
+                        <IconComp size={13} />
+                        <span>{tab.label}</span>
+                        {tab.count > 0 && (
+                          <span style={{
+                            background: isActive ? 'rgba(255, 255, 255, 0.25)' : 'rgba(255, 255, 255, 0.1)',
+                            borderRadius: '10px',
+                            padding: '1px 6px',
+                            fontSize: '0.66rem',
+                            fontWeight: 800
+                          }}>
+                            {tab.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add / Edit Connectivity Form (Admin) */}
+              {isEditingConnectivity ? (
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  borderRadius: '1.25rem',
+                  padding: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1.25rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '0.75rem' }}>
+                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Edit3 size={16} className="text-indigo-400" />
+                      <span>{editingConnItem ? 'Edit Connectivity Hub' : 'Add New Connectivity Hub'}</span>
+                    </h4>
+                    <button
+                      onClick={() => setIsEditingConnectivity(false)}
+                      style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  {/* Category Type Selector */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px' }}>
+                      Hub Type / Category
+                    </label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {[
+                        { id: 'road', label: 'Road / Expressway', icon: Car, color: '#fbbf24' },
+                        { id: 'air', label: 'Airport / Aviation', icon: Plane, color: '#22d3ee' },
+                        { id: 'rail', label: 'Railway / Train', icon: Train, color: '#c084fc' },
+                        { id: 'metro', label: 'Metro / Rapid Transit', icon: Navigation, color: '#34d399' },
+                        { id: 'sea', label: 'Port / Maritime', icon: Anchor, color: '#60a5fa' }
+                      ].map(cat => {
+                        const IconComponent = cat.icon;
+                        const isSelected = connFormCategory === cat.id;
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => setConnFormCategory(cat.id as any)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '8px 14px',
+                              borderRadius: '10px',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              background: isSelected ? 'rgba(99, 102, 241, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+                              border: isSelected ? `2px solid ${cat.color}` : '1px solid rgba(255, 255, 255, 0.1)',
+                              color: isSelected ? '#ffffff' : '#cbd5e1'
+                            }}
+                          >
+                            <IconComponent size={14} style={{ color: cat.color }} />
+                            <span>{cat.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Hub Name / Title */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Hub / Transit Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={connFormTitle}
+                      onChange={(e) => setConnFormTitle(e.target.value)}
+                      placeholder="e.g. Indira Gandhi International Airport (DEL) or NH-48 Expressway"
+                      style={{
+                        width: '100%',
+                        background: 'rgba(0, 0, 0, 0.4)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        color: '#ffffff',
+                        fontSize: '0.88rem',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  {/* Distance / ETA */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Distance / Travel Time (ETA)
+                    </label>
+                    <input
+                      type="text"
+                      value={connFormDistance}
+                      onChange={(e) => setConnFormDistance(e.target.value)}
+                      placeholder="e.g. 12 Km • 15 Mins Drive"
+                      style={{
+                        width: '100%',
+                        background: 'rgba(0, 0, 0, 0.4)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        color: '#ffffff',
+                        fontSize: '0.88rem',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  {/* Route Highlights / Description */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Route Highlights & Connectivity Details
+                    </label>
+                    <textarea
+                      value={connFormDesc}
+                      onChange={(e) => setConnFormDesc(e.target.value)}
+                      rows={3}
+                      placeholder="e.g. Direct 6-lane signal-free expressway access connecting key business districts and regional industrial corridors."
+                      style={{
+                        width: '100%',
+                        background: 'rgba(0, 0, 0, 0.4)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        color: '#ffffff',
+                        fontSize: '0.85rem',
+                        outline: 'none',
+                        resize: 'vertical'
+                      }}
+                    />
+                  </div>
+
+                  {/* Form Action Buttons */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingConnectivity(false)}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        color: '#cbd5e1',
+                        padding: '8px 18px',
+                        borderRadius: '8px',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveConnectivityItem}
+                      disabled={isSavingConnectivity}
+                      style={{
+                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                        border: 'none',
+                        color: '#ffffff',
+                        padding: '8px 24px',
+                        borderRadius: '8px',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+                        opacity: isSavingConnectivity ? 0.7 : 1
+                      }}
+                    >
+                      {isSavingConnectivity ? 'Saving...' : (editingConnItem ? 'Update Hub' : 'Save Hub')}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Connectivity Cards Grid */
+                (() => {
+                  const filtered = connectivityList.filter(item => {
+                    if (connCategoryFilter === 'all') return true;
+                    return item.category === connCategoryFilter;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div style={{ textAlign: 'center', padding: '3.5rem 1rem' }}>
+                        <Network size={54} style={{ color: '#4f46e5', margin: '0 auto 16px auto' }} />
+                        <h4 style={{ color: '#ffffff', fontSize: '1.1rem', margin: '0 0 6px 0' }}>No Connectivity Points Added Yet</h4>
+                        <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '0 0 20px 0', maxWidth: '380px', marginLeft: 'auto', marginRight: 'auto' }}>
+                          Add key connectivity hubs such as nearby airports, national highways, expressways, metro lines, and railway links.
+                        </p>
+                        {isAdmin && (
+                          <button
+                            onClick={handleOpenAddConnectivity}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                              padding: '10px 22px',
+                              borderRadius: '12px',
+                              color: '#ffffff',
+                              fontSize: '0.85rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              border: 'none',
+                              boxShadow: '0 6px 20px rgba(99,102,241,0.4)'
+                            }}
+                          >
+                            <Plus size={16} />
+                            <span>Add First Connectivity Hub</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="smart-connectivity-grid">
+                      {filtered.map(item => {
+                        let IconComp = Car;
+                        let catClass = 'smart-conn-road';
+                        let catLabel = 'Roadway / Highway';
+
+                        if (item.category === 'air') {
+                          IconComp = Plane;
+                          catClass = 'smart-conn-air';
+                          catLabel = 'Aviation / Airport';
+                        } else if (item.category === 'rail') {
+                          IconComp = Train;
+                          catClass = 'smart-conn-rail';
+                          catLabel = 'Railway Station';
+                        } else if (item.category === 'metro') {
+                          IconComp = Navigation;
+                          catClass = 'smart-conn-metro';
+                          catLabel = 'Metro / Rapid Transit';
+                        } else if (item.category === 'sea') {
+                          IconComp = Anchor;
+                          catClass = 'smart-conn-sea';
+                          catLabel = 'Maritime / Port';
+                        }
+
+                        return (
+                          <div key={item.id} className="smart-connectivity-card">
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div className={`smart-connectivity-icon-box ${catClass}`}>
+                                  <IconComp size={20} />
+                                </div>
+                                <div>
+                                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.01em' }}>
+                                    {item.title}
+                                  </h4>
+                                  <span style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                    {catLabel}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Admin Actions */}
+                              {isAdmin && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <button
+                                    onClick={() => handleOpenEditConnectivity(item)}
+                                    style={{
+                                      background: 'rgba(99, 102, 241, 0.18)',
+                                      border: '1px solid rgba(99, 102, 241, 0.4)',
+                                      borderRadius: '8px',
+                                      color: '#818cf8',
+                                      padding: '5px 10px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    title="Edit hub details"
+                                  >
+                                    <Edit3 size={12} />
+                                    <span>Edit</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteConnectivityItem(item.id)}
+                                    style={{
+                                      background: 'rgba(239, 68, 68, 0.15)',
+                                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                                      borderRadius: '8px',
+                                      color: '#ef4444',
+                                      width: '28px',
+                                      height: '28px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    title="Delete hub"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Distance / ETA Badge */}
+                            {item.distance && (
+                              <div>
+                                <span className="smart-conn-badge">
+                                  <Clock size={11} className="text-indigo-400" />
+                                  <span>{item.distance}</span>
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Description */}
+                            {item.description && (
+                              <p style={{ margin: 0, fontSize: '0.78rem', color: '#94a3b8', lineHeight: 1.5 }}>
+                                {item.description}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. LIGHTBOX FULLSCREEN PHOTO VIEWER */}
       {lightboxIndex !== null && galleryPhotos[lightboxIndex] && (
         <div className="smart-lightbox" onClick={() => setLightboxIndex(null)}>
           <button
