@@ -18,20 +18,24 @@ export const API_BASE_URL = getApiBaseUrl();
 
 export const CLOUDFRONT_DOMAIN = 'd23x4xy9audncu.cloudfront.net';
 
-// Automatically transform S3 / CloudFront URLs into high-speed, zero-CORS proxy URLs
+// Automatically transform S3 direct URLs & local upload paths into pure CloudFront CDN URLs
 export function toCloudFrontUrl(url: string): string {
   if (!url || typeof url !== 'string') return url;
-
-  // On live web domain (e.g. virtual.kalaakchar.in), route via /cdn/ for 100% CORS-free proxying
-  if (typeof window !== 'undefined' && window.location.hostname.includes('virtual.kalaakchar.in')) {
-    // Replace S3 or CloudFront URLs with /cdn/<key>
-    if (url.includes('cloudfront.net/') || url.includes('.amazonaws.com/')) {
-      return url.replace(/^https?:\/\/[^\/]+\//, '/cdn/');
-    }
-  }
-
   if (!CLOUDFRONT_DOMAIN) return url;
   
+  // If it's already a full CloudFront URL, return it
+  if (url.startsWith(`https://${CLOUDFRONT_DOMAIN}`)) {
+    return url;
+  }
+
+  // If it's a relative /uploads/ path, prepend CloudFront domain
+  if (url.startsWith('/uploads/')) {
+    return `https://${CLOUDFRONT_DOMAIN}${url}`;
+  }
+  if (url.startsWith('uploads/')) {
+    return `https://${CLOUDFRONT_DOMAIN}/${url}`;
+  }
+
   // Transforms https://<bucket>.s3.<region>.amazonaws.com/<key> -> https://<cloudfront>/<key>
   return url.replace(
     /^https:\/\/[a-zA-Z0-9._-]+\.s3[a-zA-Z0-9._-]*\.amazonaws\.com\//,
