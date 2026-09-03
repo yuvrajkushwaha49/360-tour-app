@@ -623,6 +623,7 @@ const RoadArrowBanner = ({
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              setActiveInfoId(null);
               setContextMenuId(contextMenuId === h.id ? null : h.id);
             }}
             style={{
@@ -1168,6 +1169,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                         onContextMenu={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
+                          setActiveInfoId(null);
                           setContextMenuId(contextMenuId === h.id ? null : h.id);
                         }}
                         style={{

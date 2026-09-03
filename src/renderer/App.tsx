@@ -1962,12 +1962,13 @@ export default function App() {
                 <Eye size={14} />
               </div>
               <div id="interactive-workspace-wrapper" style={{ flex: 1, overflow: 'hidden', background: '#090a0d', position: 'relative' }}>
-                {Object.values(directions).some(arr => arr.length > 0) ? (
+                {Object.values(directions).some(arr => arr.length > 0) || !!activeLoc?.stitchedPanoPath ? (
                   <Viewer360
                     adjustments={activeLoc?.adjustments || DEFAULT_ADJUSTMENTS}
                     directions={directions}
                     gridConfigs={gridConfigs}
                     hotspots={activeLoc?.hotspots || []}
+                    stitchedPanoPath={activeLoc?.stitchedPanoPath || undefined}
                     isPlacingHotspot={isPlacingHotspot}
                     setIsPlacingHotspot={setIsPlacingHotspot}
                     onAddHotspot={handleAddHotspotClick}

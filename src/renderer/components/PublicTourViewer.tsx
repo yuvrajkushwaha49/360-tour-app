@@ -44,7 +44,8 @@ import {
   File,
   ExternalLink,
   Camera,
-  Loader2
+  Loader2,
+  Save
 } from 'lucide-react';
 import Viewer360, { Viewer360Ref } from './Viewer360';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
@@ -127,6 +128,21 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
   // Quick Explore Thumbnail Upload State
   const [uploadingThumbnailLocId, setUploadingThumbnailLocId] = useState<string | null>(null);
+
+  // Hotspot Edit Modal States
+  const [showEditHotspotModal, setShowEditHotspotModal] = useState<boolean>(false);
+  const [editingHotspot, setEditingHotspot] = useState<any>(null);
+  const [editHotspotName, setEditHotspotName] = useState<string>('');
+  const [editHotspotSubtitle, setEditHotspotSubtitle] = useState<string>('');
+  const [editHotspotCategory, setEditHotspotCategory] = useState<string>('Commercial');
+  const [editHotspotTargetId, setEditHotspotTargetId] = useState<string>('');
+  const [editHotspotBeaconColor, setEditHotspotBeaconColor] = useState<string>('#a855f7');
+  const [editHotspotCustomIconUrl, setEditHotspotCustomIconUrl] = useState<string>('');
+  const [editHotspotArea, setEditHotspotArea] = useState<string>('');
+  const [editHotspotDesc, setEditHotspotDesc] = useState<string>('');
+  const [editHotspotIsPublic, setEditHotspotIsPublic] = useState<boolean>(true);
+  const [isSavingHotspot, setIsSavingHotspot] = useState<boolean>(false);
+  const [isUploadingHotspotTargetThumb, setIsUploadingHotspotTargetThumb] = useState<boolean>(false);
 
   // Check if current logged-in user is admin
   const currentUser = (() => {
@@ -665,6 +681,173 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     }
   };
 
+  // Hotspot Edit Handlers (Admin)
+  const handleOpenEditHotspot = (hs: any) => {
+    if (!isAdmin) return;
+    setEditingHotspot(hs);
+    setEditHotspotName(hs.name || '');
+    setEditHotspotSubtitle(hs.subtitle || '');
+    setEditHotspotCategory(hs.category || 'Commercial');
+    setEditHotspotTargetId(hs.targetLocationId || '');
+    setEditHotspotBeaconColor(hs.beaconColor || '#a855f7');
+    setEditHotspotCustomIconUrl(hs.customIconUrl || '');
+    setEditHotspotArea(hs.area || '');
+    setEditHotspotDesc(hs.description || '');
+    setEditHotspotIsPublic(hs.isPublic !== undefined ? hs.isPublic : true);
+    setShowEditHotspotModal(true);
+  };
+
+  const handleUploadHotspotTargetRoomThumbnail = async (targetRoomId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !targetRoomId) return;
+
+    setIsUploadingHotspotTargetThumb(true);
+    try {
+      const token = localStorage.getItem('crm_token') || localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const resData = await uploadFileWithFallback(
+        `${API_BASE_URL}/api/upload`,
+        formData,
+        token ? { Authorization: `Bearer ${token}` } : {}
+      );
+
+      if (resData && resData.url) {
+        const allLocs = tourData?.locations || [];
+        const updatedLocations = allLocs.map((l: any) =>
+          l.id === targetRoomId
+            ? { ...l, thumbnailPath: resData.url, thumbnailUrl: resData.url }
+            : l
+        );
+
+        const updatedTourData = {
+          ...(tourData || {}),
+          locations: updatedLocations
+        };
+
+        if (tourId) {
+          await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: token ? `Bearer ${token}` : ''
+            },
+            body: JSON.stringify({
+              name: tourName,
+              data: updatedTourData
+            })
+          });
+        }
+
+        setTourData(updatedTourData);
+      }
+    } catch (err: any) {
+      alert('Failed to upload thumbnail: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsUploadingHotspotTargetThumb(false);
+    }
+  };
+
+  const handleSaveHotspotDetails = async () => {
+    if (!editingHotspot || !currentLocation) return;
+    setIsSavingHotspot(true);
+    try {
+      const updatedHotspots = (currentLocation.hotspots || []).map((h: any) =>
+        h.id === editingHotspot.id
+          ? {
+              ...h,
+              name: editHotspotName.trim() || h.name,
+              subtitle: editHotspotSubtitle.trim() || undefined,
+              category: editHotspotCategory || undefined,
+              targetLocationId: editHotspotTargetId || undefined,
+              beaconColor: editHotspotBeaconColor || '#a855f7',
+              customIconUrl: editHotspotCustomIconUrl || undefined,
+              area: editHotspotArea.trim() || undefined,
+              description: editHotspotDesc.trim() || undefined,
+              isPublic: editHotspotIsPublic
+            }
+          : h
+      );
+
+      const allLocs = tourData?.locations || [];
+      const updatedLocations = allLocs.map((loc: any) =>
+        loc.id === currentLocation.id
+          ? { ...loc, hotspots: updatedHotspots }
+          : loc
+      );
+
+      const updatedTourData = {
+        ...(tourData || {}),
+        locations: updatedLocations
+      };
+
+      const token = localStorage.getItem('crm_token') || localStorage.getItem('token');
+      if (tourId) {
+        await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : ''
+          },
+          body: JSON.stringify({
+            name: tourName,
+            data: updatedTourData
+          })
+        });
+      }
+
+      setTourData(updatedTourData);
+      setShowEditHotspotModal(false);
+      setEditingHotspot(null);
+    } catch (err: any) {
+      alert(err.message || 'Failed to save hotspot details');
+    } finally {
+      setIsSavingHotspot(false);
+    }
+  };
+
+  const handleDeleteHotspot = async (hotspotIdToDelete: string) => {
+    if (!confirm('Are you sure you want to delete this hotspot?')) return;
+    if (!currentLocation) return;
+
+    try {
+      const updatedHotspots = (currentLocation.hotspots || []).filter((h: any) => h.id !== hotspotIdToDelete);
+      const allLocs = tourData?.locations || [];
+      const updatedLocations = allLocs.map((loc: any) =>
+        loc.id === currentLocation.id
+          ? { ...loc, hotspots: updatedHotspots }
+          : loc
+      );
+
+      const updatedTourData = {
+        ...(tourData || {}),
+        locations: updatedLocations
+      };
+
+      const token = localStorage.getItem('crm_token') || localStorage.getItem('token');
+      if (tourId) {
+        await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : ''
+          },
+          body: JSON.stringify({
+            name: tourName,
+            data: updatedTourData
+          })
+        });
+      }
+
+      setTourData(updatedTourData);
+      setShowEditHotspotModal(false);
+      setEditingHotspot(null);
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete hotspot');
+    }
+  };
+
   // Upload Custom Room / Location Thumbnail Handler
   const handleUploadLocationThumbnail = async (locId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1119,7 +1302,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       <div className="public-viewer-canvas" id="viewer-canvas-container">
         <Viewer360
           ref={viewer360Ref}
-          readOnly={true}
+          readOnly={!isAdmin}
           directions={currentLocation?.directions || { F: [], B: [], L: [], R: [], U: [], D: [] }}
           gridConfigs={currentLocation?.gridConfigs || {}}
           hotspots={currentLocation?.hotspots || []}
@@ -1127,10 +1310,11 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           adjustments={dynamicAdjustments}
           autoRotate={autoRotate}
           onImageNotFound={onBack}
-          onNavigate={(targetId: string) => {
+          onNavigate={(targetId: string, position?: [number, number, number]) => {
             const targetLoc = locations.find((l: any) => l.id === targetId);
             if (targetLoc) handleLocationChange(targetLoc.id);
           }}
+          onEditHotspot={handleOpenEditHotspot}
         />
       </div>
 
@@ -2859,6 +3043,402 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
               borderRadius: '20px'
             }}>
               Photo {lightboxIndex + 1} of {galleryPhotos.length}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hotspot & Room Link Edit Modal (Admin) */}
+      {showEditHotspotModal && editingHotspot && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 999999,
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{
+            background: 'linear-gradient(165deg, rgba(17, 22, 42, 0.98) 0%, rgba(10, 13, 26, 0.99) 100%)',
+            border: '1px solid rgba(99, 102, 241, 0.4)',
+            padding: '24px 28px',
+            borderRadius: '24px',
+            width: '100%',
+            maxWidth: '520px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 30px 80px rgba(0, 0, 0, 0.85)',
+            position: 'relative',
+            color: '#ffffff',
+            animation: 'modalSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}>
+            {/* Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+              paddingBottom: '16px',
+              marginBottom: '18px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))',
+                  border: '1px solid rgba(99, 102, 241, 0.45)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#818cf8'
+                }}>
+                  <Navigation size={20} />
+                </div>
+                <div>
+                  <h3 style={{
+                    margin: 0,
+                    fontSize: '1.15rem',
+                    fontWeight: 800,
+                    background: 'linear-gradient(135deg, #ffffff 40%, #c7d2fe 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent'
+                  }}>
+                    Edit 3D Hotspot & Room Link
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px' }}>
+                    Configure 3D beacon navigation, visuals & client access
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => { setShowEditHotspotModal(false); setEditingHotspot(null); }}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: '#94a3b8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Hotspot Name / Title */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '6px' }}>
+                Hotspot Title *
+              </label>
+              <input
+                type="text"
+                value={editHotspotName}
+                onChange={(e) => setEditHotspotName(e.target.value)}
+                placeholder="e.g. Master Bedroom, Clubhouse, Infinity Pool"
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '10px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  color: '#ffffff',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Subtitle / Distance Badge */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '6px' }}>
+                Distance / Subtitle Badge (Optional)
+              </label>
+              <input
+                type="text"
+                value={editHotspotSubtitle}
+                onChange={(e) => setEditHotspotSubtitle(e.target.value)}
+                placeholder="e.g. 5 km, Phase 1, 2 BHK Luxury"
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '10px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  color: '#ffffff',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Target Room Link & Custom Thumbnail Box */}
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(99, 102, 241, 0.3)',
+              borderRadius: '14px',
+              padding: '14px',
+              marginBottom: '16px'
+            }}>
+              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#818cf8', marginBottom: '6px' }}>
+                🔗 Linked Target Room
+              </label>
+              <select
+                value={editHotspotTargetId}
+                onChange={(e) => setEditHotspotTargetId(e.target.value)}
+                style={{
+                  width: '100%',
+                  backgroundColor: '#070913',
+                  border: '1px solid #1e2438',
+                  borderRadius: '10px',
+                  padding: '9px 12px',
+                  fontSize: '0.85rem',
+                  color: '#ffffff',
+                  outline: 'none',
+                  marginBottom: editHotspotTargetId ? '12px' : '0'
+                }}
+              >
+                <option value="">-- No Link (Standalone Landmark) --</option>
+                {locations.filter((l: any) => l.id !== currentLocation?.id).map((loc: any) => (
+                  <option key={loc.id} value={loc.id}>📍 {loc.name}</option>
+                ))}
+              </select>
+
+              {/* Target Room Thumbnail Card with 1-Click Upload */}
+              {editHotspotTargetId && (() => {
+                const targetRoom = locations.find((l: any) => l.id === editHotspotTargetId);
+                if (!targetRoom) return null;
+
+                const targetThumb = (targetRoom.thumbnailPath || targetRoom.thumbnailUrl)
+                  ? toCloudFrontUrl(targetRoom.thumbnailPath || targetRoom.thumbnailUrl)
+                  : targetRoom.stitchedPanoPath
+                    ? toCloudFrontUrl(targetRoom.stitchedPanoPath)
+                    : (targetRoom.directions?.F?.[0]?.path || (Object.values(targetRoom.directions || {}).flat() as any)[0]?.path)
+                      ? toCloudFrontUrl(targetRoom.directions?.F?.[0]?.path || (Object.values(targetRoom.directions || {}).flat() as any)[0]?.path)
+                      : '';
+
+                return (
+                  <div style={{
+                    marginTop: '10px',
+                    padding: '10px 12px',
+                    background: 'rgba(0,0,0,0.4)',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}>
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      <div style={{
+                        width: '80px',
+                        height: '52px',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        background: '#070913',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        {targetThumb ? (
+                          <img src={targetThumb} alt={targetRoom.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <span style={{ fontSize: '1.2rem' }}>🌐</span>
+                        )}
+                      </div>
+
+                      {/* Direct Thumbnail Upload Button */}
+                      <label
+                        style={{
+                          position: 'absolute',
+                          bottom: '-4px',
+                          right: '-4px',
+                          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                          border: '1px solid #ffffff',
+                          borderRadius: '6px',
+                          padding: '2px 6px',
+                          color: '#ffffff',
+                          fontSize: '0.62rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.6)',
+                          zIndex: 10
+                        }}
+                        title="Upload Custom Room Thumbnail Photo"
+                      >
+                        <Camera size={10} />
+                        <span>{isUploadingHotspotTargetThumb ? '...' : 'Edit'}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleUploadHotspotTargetRoomThumbnail(targetRoom.id, e)}
+                          hidden
+                        />
+                      </label>
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#ffffff' }}>{targetRoom.name}</div>
+                      <div style={{ fontSize: '0.7rem', color: targetRoom.thumbnailPath ? '#10b981' : '#94a3b8', marginTop: '2px' }}>
+                        {targetRoom.thumbnailPath ? '✓ Custom Thumbnail Set' : 'Using default panorama thumbnail'}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Beacon Color & Category */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '6px' }}>
+                  Glow Theme Color
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="color"
+                    value={editHotspotBeaconColor}
+                    onChange={(e) => setEditHotspotBeaconColor(e.target.value)}
+                    style={{ width: '36px', height: '36px', border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'transparent' }}
+                  />
+                  <span style={{ fontSize: '0.8rem', color: editHotspotBeaconColor, fontWeight: 700 }}>
+                    {editHotspotBeaconColor}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '6px' }}>
+                  Category
+                </label>
+                <select
+                  value={editHotspotCategory}
+                  onChange={(e) => setEditHotspotCategory(e.target.value)}
+                  style={{
+                    width: '100%',
+                    backgroundColor: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: '10px',
+                    padding: '8px 10px',
+                    fontSize: '0.82rem',
+                    color: '#ffffff',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="Commercial">🏢 Commercial</option>
+                  <option value="Residential">🏠 Residential</option>
+                  <option value="Transport">🚆 Transport</option>
+                  <option value="Green">🌳 Green & Park</option>
+                  <option value="Civic">🏛️ Civic</option>
+                  <option value="Facility">⚡ Facility</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Description / Notes */}
+            <div style={{ marginBottom: '18px' }}>
+              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '6px' }}>
+                Description / Notes (Optional)
+              </label>
+              <textarea
+                rows={2}
+                value={editHotspotDesc}
+                onChange={(e) => setEditHotspotDesc(e.target.value)}
+                placeholder="Add room details or specific highlights..."
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  color: '#ffffff',
+                  fontSize: '0.82rem',
+                  outline: 'none',
+                  resize: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
+              <button
+                type="button"
+                onClick={() => handleDeleteHotspot(editingHotspot.id)}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#f87171',
+                  borderRadius: '10px',
+                  padding: '9px 14px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Trash2 size={14} />
+                <span>Delete</span>
+              </button>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowEditHotspotModal(false); setEditingHotspot(null); }}
+                  style={{
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: '#94a3b8',
+                    borderRadius: '10px',
+                    padding: '9px 16px',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSaveHotspotDetails}
+                  disabled={isSavingHotspot}
+                  style={{
+                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    border: 'none',
+                    color: '#ffffff',
+                    borderRadius: '10px',
+                    padding: '9px 20px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {isSavingHotspot ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
+                  <span>{isSavingHotspot ? 'Saving...' : 'Save Changes'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
