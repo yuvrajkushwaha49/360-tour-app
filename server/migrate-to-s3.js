@@ -102,9 +102,12 @@ async function runMigration() {
         }));
 
         const cdnUrl = getAssetUrl(s3Key);
-        console.log(`[${i + 1}/${files.length}] ✅ Uploaded: ${filename} ➔ ${cdnUrl}`);
+        
+        // Delete the file from local server disk after successful S3 transfer
+        fs.unlinkSync(filePath);
+        console.log(`[${i + 1}/${files.length}] ✅ Uploaded to S3 & Deleted from server: ${filename} ➔ ${cdnUrl}`);
       } catch (err) {
-        console.error(`[${i + 1}/${files.length}] ❌ Failed to upload ${filename}:`, err.message);
+        console.error(`[${i + 1}/${files.length}] ❌ Failed to upload ${filename} (kept on server):`, err.message);
       }
     }
   }
