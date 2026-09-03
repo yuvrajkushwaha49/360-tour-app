@@ -148,14 +148,18 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-3 py-3 px-4 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-sm font-bold rounded-2xl shadow-xl shadow-indigo-600/30 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+            style={{
+              background: 'linear-gradient(90deg, #7c3aed 0%, #a855f7 35%, #d97706 75%, #f59e0b 100%)',
+              boxShadow: '0 8px 25px rgba(124, 58, 237, 0.45), 0 0 20px rgba(245, 158, 11, 0.25)'
+            }}
+            className="w-full mt-3 py-3 px-4 text-white text-sm font-bold rounded-2xl transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
           >
             {loading ? (
               <span className="animate-pulse">Authenticating...</span>
             ) : (
               <>
                 <LogIn className="w-4 h-4" />
-                <span>Sign In to Portal</span>
+                <span>Login →</span>
               </>
             )}
           </button>

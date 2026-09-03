@@ -18,7 +18,7 @@ import {
   Building2,
   Map,
   Network,
-  Image,
+  Image as ImageIcon,
   FileText,
   Star,
   ChevronLeft,
@@ -27,7 +27,12 @@ import {
   RotateCw,
   Target,
   Plus,
-  Minus
+  Minus,
+  Upload,
+  Trash2,
+  Edit3,
+  ZoomIn,
+  Info
 } from 'lucide-react';
 import Viewer360 from './Viewer360';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
@@ -50,6 +55,30 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [error, setError] = useState<string | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+
+  // Master Plan States
+  const [isEditingMasterPlan, setIsEditingMasterPlan] = useState<boolean>(false);
+  const [mpTitle, setMpTitle] = useState<string>('');
+  const [mpMessage, setMpMessage] = useState<string>('');
+  const [mpImage, setMpImage] = useState<string>('');
+  const [isUploadingMp, setIsUploadingMp] = useState<boolean>(false);
+  const [isSavingMp, setIsSavingMp] = useState<boolean>(false);
+
+  // Gallery States
+  const [galleryPhotos, setGalleryPhotos] = useState<string[]>([]);
+  const [isUploadingGallery, setIsUploadingGallery] = useState<boolean>(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  // Check if current logged-in user is admin
+  const currentUser = (() => {
+    try {
+      const saved = localStorage.getItem('crm_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const isAdmin = currentUser?.role === 'admin';
 
   // Smart City Portal UI States
   const [activeNavTab, setActiveNavTab] = useState<string>('overview');
@@ -96,6 +125,18 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       const foundLogo = data.clientLogo || data.client_logo || data.tourData?.client_logo || data.tourData?.clientLogo || '';
       setClientLogo(foundLogo);
 
+      // Initialize Master Plan
+      if (data.tourData?.masterPlan) {
+        setMpTitle(data.tourData.masterPlan.title || '');
+        setMpMessage(data.tourData.masterPlan.message || '');
+        setMpImage(data.tourData.masterPlan.imageUrl || '');
+      }
+
+      // Initialize Gallery
+      if (data.tourData?.gallery && Array.isArray(data.tourData.gallery)) {
+        setGalleryPhotos(data.tourData.gallery);
+      }
+
       const locations = data.tourData?.locations || [];
       if (locations.length > 0) {
         const savedLocId = localStorage.getItem(`active_public_loc_${tourId}`);
@@ -112,6 +153,162 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       setError(err.message || 'Error loading 360 tour');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUploadMasterPlanImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingMp(true);
+    try {
+      const token = localStorage.getItem('crm_token');
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const res = await fetch(`${API_BASE_URL}/api/upload`, {
+        method: 'POST',
+        headers: {
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: formData
+      });
+
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to upload master plan image');
+
+      setMpImage(resData.url);
+    } catch (err: any) {
+      alert(err.message || 'Image upload failed');
+    } finally {
+      setIsUploadingMp(false);
+    }
+  };
+
+  const handleSaveMasterPlan = async () => {
+    setIsSavingMp(true);
+    try {
+      const token = localStorage.getItem('crm_token');
+      const updatedMasterPlan = {
+        title: mpTitle || `${displayName} Master Plan`,
+        message: mpMessage,
+        imageUrl: mpImage
+      };
+
+      const updatedTourData = {
+        ...(tourData || {}),
+        masterPlan: updatedMasterPlan
+      };
+
+      const res = await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          name: tourName,
+          data: updatedTourData
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to save master plan');
+      }
+
+      setTourData(updatedTourData);
+      setIsEditingMasterPlan(false);
+    } catch (err: any) {
+      alert(err.message || 'Could not save master plan');
+    } finally {
+      setIsSavingMp(false);
+    }
+  };
+
+  const handleUploadGalleryPhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploadingGallery(true);
+    try {
+      const token = localStorage.getItem('crm_token');
+      const newUrls: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData();
+        formData.append('image', files[i]);
+
+        const res = await fetch(`${API_BASE_URL}/api/upload`, {
+          method: 'POST',
+          headers: {
+            Authorization: token ? `Bearer ${token}` : ''
+          },
+          body: formData
+        });
+
+        const resData = await res.json();
+        if (res.ok && resData.url) {
+          newUrls.push(resData.url);
+        }
+      }
+
+      if (newUrls.length > 0) {
+        const updatedGallery = [...galleryPhotos, ...newUrls];
+        const updatedTourData = {
+          ...(tourData || {}),
+          gallery: updatedGallery
+        };
+
+        await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : ''
+          },
+          body: JSON.stringify({
+            name: tourName,
+            data: updatedTourData
+          })
+        });
+
+        setGalleryPhotos(updatedGallery);
+        setTourData(updatedTourData);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to upload gallery photos');
+    } finally {
+      setIsUploadingGallery(false);
+    }
+  };
+
+  const handleDeleteGalleryPhoto = async (indexToDelete: number) => {
+    if (!confirm('Are you sure you want to remove this photo from the gallery?')) return;
+
+    const updatedGallery = galleryPhotos.filter((_, idx) => idx !== indexToDelete);
+    try {
+      const token = localStorage.getItem('crm_token');
+      const updatedTourData = {
+        ...(tourData || {}),
+        gallery: updatedGallery
+      };
+
+      await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          name: tourName,
+          data: updatedTourData
+        })
+      });
+
+      setGalleryPhotos(updatedGallery);
+      setTourData(updatedTourData);
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete photo');
     }
   };
 
@@ -359,7 +556,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             onClick={() => setActiveNavTab('gallery')}
             className={`smart-nav-btn ${activeNavTab === 'gallery' ? 'active' : ''}`}
           >
-            <Image size={14} />
+            <ImageIcon size={14} />
             <span>Gallery</span>
           </button>
         </div>
@@ -459,7 +656,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           </div>
 
           <div className="smart-menu-item" onClick={() => setActiveNavTab('gallery')}>
-            <div className="smart-menu-icon"><Image size={15} /></div>
+            <div className="smart-menu-icon"><ImageIcon size={15} /></div>
             <div>
               <div className="smart-menu-label">GALLERY</div>
               <div className="smart-menu-sub">Photos & videos</div>
@@ -514,7 +711,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           adjustments={dynamicAdjustments}
           autoRotate={autoRotate}
           onImageNotFound={onBack}
-          onNavigate={(targetId) => {
+          onNavigate={(targetId: string) => {
             const targetLoc = locations.find((l: any) => l.id === targetId);
             if (targetLoc) handleLocationChange(targetLoc.id);
           }}
@@ -662,6 +859,554 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           <span className="smart-compass-n">N</span>
         </div>
       </div>
+
+      {/* 1. MASTER PLAN MODAL OVERLAY */}
+      {activeNavTab === 'masterplan' && (
+        <div className="smart-content-overlay" onClick={() => setActiveNavTab('overview')}>
+          <div className="smart-content-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="smart-content-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'rgba(99, 102, 241, 0.18)',
+                  border: '1px solid rgba(99, 102, 241, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#818cf8'
+                }}>
+                  <Map size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '0.02em' }}>
+                    {mpTitle || `${displayName} - Master Plan Blueprint`}
+                  </h3>
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+                    Strategic zoning layout, infrastructure corridors & visionary development
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {isAdmin && (
+                  <button
+                    onClick={() => setIsEditingMasterPlan(!isEditingMasterPlan)}
+                    style={{
+                      background: isEditingMasterPlan ? 'rgba(239, 68, 68, 0.2)' : 'rgba(99, 102, 241, 0.25)',
+                      border: `1px solid ${isEditingMasterPlan ? 'rgba(239, 68, 68, 0.5)' : 'rgba(99, 102, 241, 0.5)'}`,
+                      color: isEditingMasterPlan ? '#fca5a5' : '#c7d2fe',
+                      padding: '6px 14px',
+                      borderRadius: '10px',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Edit3 size={14} />
+                    <span>{isEditingMasterPlan ? 'Cancel Edit' : 'Edit Master Plan'}</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setActiveNavTab('overview')}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#ffffff',
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer'
+                  }}
+                  title="Close Master Plan"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="smart-content-modal-body">
+              {isEditingMasterPlan ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Master Plan Title
+                      </label>
+                      <input
+                        type="text"
+                        value={mpTitle}
+                        onChange={(e) => setMpTitle(e.target.value)}
+                        placeholder="e.g. Phase 1 Master Plan Blueprint"
+                        style={{
+                          width: '100%',
+                          background: '#070913',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          borderRadius: '10px',
+                          padding: '10px 14px',
+                          color: '#ffffff',
+                          fontSize: '0.9rem',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Master Plan Image (Blueprint / 2D Map)
+                      </label>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        background: 'rgba(99, 102, 241, 0.15)',
+                        border: '1px dashed rgba(99, 102, 241, 0.4)',
+                        borderRadius: '10px',
+                        padding: '9px 14px',
+                        color: '#c7d2fe',
+                        fontSize: '0.85rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}>
+                        <Upload size={16} />
+                        <span>{isUploadingMp ? 'Uploading Image...' : mpImage ? 'Replace Master Plan Image' : 'Upload Blueprint Image'}</span>
+                        <input type="file" accept="image/*" onChange={handleUploadMasterPlanImage} hidden />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Master Plan Message & Vision Details
+                    </label>
+                    <textarea
+                      rows={5}
+                      value={mpMessage}
+                      onChange={(e) => setMpMessage(e.target.value)}
+                      placeholder="Enter detailed message, zone details, road infrastructure highlights, phases, and vision..."
+                      style={{
+                        width: '100%',
+                        background: '#070913',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        borderRadius: '10px',
+                        padding: '12px 14px',
+                        color: '#ffffff',
+                        fontSize: '0.88rem',
+                        lineHeight: 1.5,
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  {mpImage && (
+                    <div style={{
+                      height: '180px',
+                      borderRadius: '10px',
+                      overflow: 'hidden',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: '#070913',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <img src={toCloudFrontUrl(mpImage)} alt="Master Plan Preview" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingMasterPlan(false)}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        color: '#cbd5e1',
+                        padding: '8px 18px',
+                        borderRadius: '10px',
+                        fontSize: '0.85rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSavingMp || isUploadingMp}
+                      onClick={handleSaveMasterPlan}
+                      style={{
+                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                        border: 'none',
+                        color: '#ffffff',
+                        padding: '8px 24px',
+                        borderRadius: '10px',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 16px rgba(99,102,241,0.4)'
+                      }}
+                    >
+                      {isSavingMp ? 'Saving Master Plan...' : 'Save Master Plan'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="smart-masterplan-layout">
+                  {/* Left Blueprint Map Image */}
+                  <div className="smart-masterplan-img-card">
+                    {mpImage ? (
+                      <img
+                        src={toCloudFrontUrl(mpImage)}
+                        alt="Master Plan Blueprint"
+                        className="smart-masterplan-img"
+                        onClick={() => {
+                          const idx = galleryPhotos.indexOf(mpImage);
+                          if (idx !== -1) setLightboxIndex(idx);
+                          else {
+                            setGalleryPhotos([mpImage, ...galleryPhotos]);
+                            setLightboxIndex(0);
+                          }
+                        }}
+                        title="Click to Enlarge"
+                      />
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '2rem' }}>
+                        <Map size={48} style={{ color: '#4f46e5', margin: '0 auto 12px auto' }} />
+                        <h4 style={{ color: '#ffffff', fontSize: '1.05rem', margin: '0 0 6px 0' }}>No Master Plan Image Uploaded</h4>
+                        <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 16px 0', maxWidth: '300px' }}>
+                          Upload the high-resolution master plan or architectural blueprint to display here.
+                        </p>
+                        {isAdmin && (
+                          <label style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                            padding: '8px 18px',
+                            borderRadius: '10px',
+                            color: '#ffffff',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}>
+                            <Upload size={15} />
+                            <span>Upload Master Plan</span>
+                            <input type="file" accept="image/*" onChange={handleUploadMasterPlanImage} hidden />
+                          </label>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Master Plan Details & Message */}
+                  <div className="smart-masterplan-info">
+                    <div className="smart-masterplan-msg-box">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: '#818cf8', fontWeight: 700, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        <Info size={16} />
+                        <span>Master Plan Message & Overview</span>
+                      </div>
+                      <div style={{ whiteSpace: 'pre-line', color: '#cbd5e1', fontSize: '0.88rem', lineHeight: 1.6 }}>
+                        {mpMessage || 'Welcome to the Master Plan overview. Explore the comprehensive master planning, strategic zoning, infrastructure networks, and eco-friendly corridors designed for state-of-the-art urban excellence.'}
+                      </div>
+                    </div>
+
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '1rem',
+                      padding: '1.25rem'
+                    }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
+                        Strategic Zone Highlights
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#e2e8f0' }}>
+                          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#a855f7' }} />
+                          <span>Industrial & Manufacturing Hub</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#e2e8f0' }}>
+                          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#3b82f6' }} />
+                          <span>Commercial & High-Tech Core</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#e2e8f0' }}>
+                          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981' }} />
+                          <span>Eco Corridors & Public Green Space</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. PHOTO GALLERY MODAL OVERLAY */}
+      {activeNavTab === 'gallery' && (
+        <div className="smart-content-overlay" onClick={() => setActiveNavTab('overview')}>
+          <div className="smart-content-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="smart-content-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'rgba(99, 102, 241, 0.18)',
+                  border: '1px solid rgba(99, 102, 241, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#818cf8'
+                }}>
+                  <ImageIcon size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '0.02em' }}>
+                    PROJECT PHOTO GALLERY
+                  </h3>
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+                    High-resolution photographs, site captures, and visual gallery for {displayName}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {isAdmin && (
+                  <label style={{
+                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    border: 'none',
+                    color: '#ffffff',
+                    padding: '7px 16px',
+                    borderRadius: '10px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 4px 16px rgba(99,102,241,0.35)'
+                  }}>
+                    <Upload size={14} />
+                    <span>{isUploadingGallery ? 'Uploading...' : '+ Add Photos'}</span>
+                    <input type="file" multiple accept="image/*" onChange={handleUploadGalleryPhotos} hidden />
+                  </label>
+                )}
+
+                <button
+                  onClick={() => setActiveNavTab('overview')}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#ffffff',
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer'
+                  }}
+                  title="Close Gallery"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="smart-content-modal-body">
+              {galleryPhotos && galleryPhotos.length > 0 ? (
+                <div className="smart-gallery-grid">
+                  {galleryPhotos.map((photoUrl, idx) => (
+                    <div
+                      key={idx}
+                      className="smart-gallery-item"
+                      onClick={() => setLightboxIndex(idx)}
+                    >
+                      <img
+                        src={toCloudFrontUrl(photoUrl)}
+                        alt={`Gallery Photo ${idx + 1}`}
+                        className="smart-gallery-img"
+                      />
+                      <div className="smart-gallery-overlay">
+                        <span style={{ fontSize: '0.74rem', color: '#ffffff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <ZoomIn size={14} /> Click to view
+                        </span>
+                      </div>
+
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteGalleryPhoto(idx);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            background: 'rgba(239, 68, 68, 0.85)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            color: '#ffffff',
+                            width: '26px',
+                            height: '26px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                            zIndex: 10
+                          }}
+                          title="Delete photo"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '4rem 1rem' }}>
+                  <ImageIcon size={54} style={{ color: '#4f46e5', margin: '0 auto 16px auto' }} />
+                  <h4 style={{ color: '#ffffff', fontSize: '1.1rem', margin: '0 0 6px 0' }}>No Photos in Gallery Yet</h4>
+                  <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '0 0 20px 0', maxWidth: '340px', marginLeft: 'auto', marginRight: 'auto' }}>
+                    Upload property photos, progress pictures, and visual captures to display in this interactive gallery.
+                  </p>
+                  {isAdmin && (
+                    <label style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                      padding: '10px 22px',
+                      borderRadius: '12px',
+                      color: '#ffffff',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 6px 20px rgba(99,102,241,0.4)'
+                    }}>
+                      <Upload size={16} />
+                      <span>Upload Photos to Gallery</span>
+                      <input type="file" multiple accept="image/*" onChange={handleUploadGalleryPhotos} hidden />
+                    </label>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. LIGHTBOX FULLSCREEN PHOTO VIEWER */}
+      {lightboxIndex !== null && galleryPhotos[lightboxIndex] && (
+        <div className="smart-lightbox" onClick={() => setLightboxIndex(null)}>
+          <button
+            onClick={() => setLightboxIndex(null)}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              background: 'rgba(255, 255, 255, 0.15)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              zIndex: 100001
+            }}
+          >
+            <X size={20} />
+          </button>
+
+          {galleryPhotos.length > 1 && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((lightboxIndex - 1 + galleryPhotos.length) % galleryPhotos.length);
+                }}
+                style={{
+                  position: 'absolute',
+                  left: '20px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'rgba(0, 0, 0, 0.65)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '50%',
+                  width: '44px',
+                  height: '44px',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  zIndex: 100001
+                }}
+              >
+                <ChevronLeft size={24} />
+              </button>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((lightboxIndex + 1) % galleryPhotos.length);
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '20px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'rgba(0, 0, 0, 0.65)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '50%',
+                  width: '44px',
+                  height: '44px',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  zIndex: 100001
+                }}
+              >
+                <ChevronRight size={24} />
+              </button>
+            </>
+          )}
+
+          <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+            <img
+              src={toCloudFrontUrl(galleryPhotos[lightboxIndex])}
+              alt="Enlarged View"
+            />
+            <div style={{
+              marginTop: '12px',
+              fontSize: '0.85rem',
+              color: '#94a3b8',
+              fontWeight: 600,
+              background: 'rgba(0,0,0,0.6)',
+              padding: '4px 14px',
+              borderRadius: '20px'
+            }}>
+              Photo {lightboxIndex + 1} of {galleryPhotos.length}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

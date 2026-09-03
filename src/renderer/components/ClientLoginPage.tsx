@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Layers, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { API_BASE_URL } from '../utils/apiConfig';
+import StarfieldBackground from './StarfieldBackground';
 
 interface ClientLoginPageProps {
   onSuccess: (user: { id: string; name: string; email: string; role: string }, token: string) => void;
@@ -10,6 +11,7 @@ interface ClientLoginPageProps {
 export default function ClientLoginPage({ onSuccess, onBack }: ClientLoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,129 +33,149 @@ export default function ClientLoginPage({ onSuccess, onBack }: ClientLoginPagePr
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || 'Invalid email or password.');
+        throw new Error(data.error || 'Invalid username or password.');
       }
 
       onSuccess(data.user, data.token);
     } catch (err: any) {
-      setError(err.message || 'Server connection failed. Please start server on port 5000.');
+      setError(err.message || 'Server connection failed. Please check server connection.');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleForgotPassword = () => {
+    alert('Please contact your administrator to reset your password or access credentials.');
+  };
+
   return (
-    <div className="login-page-container select-none">
-      {/* Deep Blue Background Radial Gradient */}
-      <div className="login-radial-bg"></div>
+    <div className="universe-login-container select-none">
+      <StarfieldBackground />
+      <div className="universe-login-overlay"></div>
 
-      {/* Main Glass Split Card Container */}
-      <div className="container max-w-6xl z-1 position-relative my-auto">
-        <div className="row g-4 align-items-stretch">
-          
-          {/* Left Box: Login Form Card */}
-          <div className="col-12 col-lg-6">
-            <div className="login-glass-card h-100 d-flex flex-column justify-between">
-              <div>
-                {/* Header Title & Subtitle */}
-                <div className="text-center mb-4">
-                  <h1 className="h2 font-weight-black text-white mb-2">Welcome Back</h1>
-                  <p className="small text-secondary max-w-sm mx-auto mb-0">
-                    Sign in to your 360 Panorama Studio account to view your Virtual Tours
-                  </p>
-                </div>
+      <div className="universe-login-content">
+        {/* Left Side: Universe Branding Text */}
+        <div className="universe-hero-brand">
+          <div className="universe-welcome-tag">
+            WELCOME TO
+          </div>
+          <h1 className="universe-title">
+            UNIVERSE
+          </h1>
+          <div className="universe-accent-bar"></div>
+          <div className="universe-taglines">
+            <div>One platform.</div>
+            <div>Infinite possibilities.</div>
+          </div>
+        </div>
 
-                {/* Form */}
-                <form onSubmit={(e) => handleSubmit(e)} className="max-w-md mx-auto">
-                  {error && (
-                    <div className="alert alert-danger py-2.5 px-3 rounded-3 small text-center mb-3">
-                      ⚠️ {error}
-                    </div>
-                  )}
+        {/* Right Side: Glassmorphic Floating Login Card */}
+        <div className="universe-glass-card premium-box ">
+          <div className="glow glow-purple"></div>
+          <div className="glow glow-yellow"></div>
+          <div className="glow glow-blue"></div>
 
-                  {/* Email Address */}
-                  <div className="mb-3">
-                    <label className="form-label small font-weight-bold text-secondary">Email Address</label>
-                    <div className="position-relative">
-                      <div className="login-input-icon">
-                        <Mail className="w-4 h-4" />
-                      </div>
-                      <input
-                        type="email"
-                        required
-                        placeholder="Enter your email address"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="form-control login-input-box"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Password */}
-                  <div className="mb-4">
-                    <label className="form-label small font-weight-bold text-secondary">Password</label>
-                    <div className="position-relative">
-                      <div className="login-input-icon">
-                        <Lock className="w-4 h-4" />
-                      </div>
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        required
-                        placeholder="Enter your password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="form-control login-input-box"
-                        style={{ paddingRight: '2.75rem' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="btn btn-link position-absolute end-0 top-50 translate-middle-y text-secondary text-decoration-none p-0 pe-3"
-                        style={{ zIndex: 10, background: 'none', border: 'none' }}
-                        title={showPassword ? "Hide password" : "Show password"}
-                      >
-                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Sign In Button */}
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="btn btn-light w-100 py-3 font-weight-black text-dark rounded-3 shadow-lg"
-                  >
-                    {loading ? 'Signing In...' : 'Sign In'}
-                  </button>
-                </form>
-              </div>
-            </div>
+          <div className="universe-card-header">
+            <h2 className="universe-card-title">Login</h2>
+            <p className="universe-card-subtitle">
+              Access your <span className="universe-highlight">Universe</span>
+            </p>
           </div>
 
-          {/* Right Box: 360 VR Showcase */}
-          <div className="col-12 col-lg-6">
-            <div className="login-glass-card h-100 d-flex flex-column align-items-center justify-between text-center">
-              <div className="w-100 d-flex justify-content-end mb-3">
-                <span className="badge bg-primary bg-opacity-25 text-primary border border-primary border-opacity-25 rounded-pill px-3 py-1 small">
-                  360° Panorama VR Engine
-                </span>
+          <form onSubmit={(e) => handleSubmit(e)}>
+            {error && (
+              <div className="universe-alert-error">
+                ⚠️ {error}
               </div>
+            )}
 
-              <div className="my-4 position-relative">
-                <div className="kpi-icon-box bg-primary bg-opacity-25 text-primary border border-primary border-opacity-50 p-4 rounded-circle mx-auto shadow-lg">
-                  <Layers className="w-12 h-12" />
-                </div>
+            {/* Username / Email Input */}
+            <div className="universe-input-group">
+              <div className="universe-input-icon-left">
+                <User size={18} />
               </div>
-
-              <div>
-                <h2 className="h4 font-weight-bold text-white mb-2">Virtual Tour Studio</h2>
-                <p className="small text-secondary max-w-xs mx-auto mb-0">
-                  Experience interactive 360° panoramas & real-time virtual tours
-                </p>
-              </div>
+              <input
+                type="text"
+                required
+                placeholder="Username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="universe-input"
+                autoComplete="username"
+                style={{
+                  backgroundColor: '#000000',
+                  background: '#000000',
+                  color: '#ffffff',
+                  border: '1px solid rgb(16 0 96)'
+                }}
+              />
             </div>
-          </div>
 
+            {/* Password Input */}
+            <div className="universe-input-group">
+              <div className="universe-input-icon-left">
+                <Lock size={18} />
+              </div>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="universe-input"
+                autoComplete="current-password"
+                style={{
+                  backgroundColor: '#000000',
+                  background: '#000000',
+                  color: '#ffffff',
+                  border: '1px solid rgb(16 0 96)',
+                  paddingRight: '3.25rem'
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="universe-input-icon-right"
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+
+            {/* Remember Me & Forgot Password Row */}
+            <div className="universe-form-row">
+              <label className="universe-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="universe-checkbox"
+                />
+                <span>Remember me</span>
+              </label>
+
+              <a
+                href="#forgot"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleForgotPassword();
+                }}
+                className="universe-forgot-link"
+              >
+                Forgot Password?
+              </a>
+            </div>
+
+            {/* Vibrant Purple-to-Amber Login Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="universe-login-btn "
+            >
+              <span>{loading ? 'Logging in...' : 'Login'}</span>
+              {!loading && <ArrowRight size={18} />}
+            </button>
+          </form>
         </div>
       </div>
     </div>
