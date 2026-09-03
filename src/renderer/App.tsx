@@ -1988,6 +1988,7 @@ export default function App() {
                     onAddAreaOutline={handleStartDrawingAreaForHotspot}
                     areaType={areaType}
                     onOpenAdjustments={() => setActiveRightTab('adjustments')}
+                    galleryPhotos={(activeLoc as any)?.gallery || []}
                   />
                 ) : (
                   <div className="viewer-placeholder" style={{ height: '100%', padding: '20px' }}>

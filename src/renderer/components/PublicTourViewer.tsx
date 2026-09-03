@@ -87,6 +87,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [error, setError] = useState<string | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState<boolean>(() => {
+    const saved = localStorage.getItem('tour_right_sidebar_open');
+    return saved !== null ? saved === 'true' : true;
+  });
 
   // Master Plan States
   const [isEditingMasterPlan, setIsEditingMasterPlan] = useState<boolean>(false);
@@ -158,11 +162,23 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   // Smart City Portal UI States
   const [activeNavTab, setActiveNavTab] = useState<string>('overview');
   const [timeOfDay, setTimeOfDay] = useState<'day' | 'sunset' | 'night'>('day');
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
+    const saved = localStorage.getItem('tour_left_sidebar_open');
+    return saved !== null ? saved === 'true' : true;
+  });
   const [autoRotate, setAutoRotate] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const carouselScrollRef = useRef<HTMLDivElement>(null);
   const viewer360Ref = useRef<Viewer360Ref>(null);
+
+  // Sync sidebar open/close state to localStorage so it stays persistent on reload
+  useEffect(() => {
+    localStorage.setItem('tour_left_sidebar_open', String(sidebarOpen));
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    localStorage.setItem('tour_right_sidebar_open', String(rightSidebarOpen));
+  }, [rightSidebarOpen]);
 
   const handleLocationChange = (locId: string) => {
     setActiveLocationId(locId);
@@ -1050,6 +1066,17 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const locations = tourData.locations || [];
   const currentLocation = locations.find((l: any) => l.id === activeLocationId) || locations[0];
 
+  // Locations sorted: Private locations FIRST, then Public locations (without mentioning private/public labels)
+  const sortedLocations = (locations && locations.length > 0)
+    ? [...locations].sort((a: any, b: any) => {
+        const aIsPrivate = a.isPublic === false || a.isPrivate === true || a.access === 'private';
+        const bIsPrivate = b.isPublic === false || b.isPrivate === true || b.access === 'private';
+        if (aIsPrivate && !bIsPrivate) return -1;
+        if (!aIsPrivate && bIsPrivate) return 1;
+        return 0;
+      })
+    : [];
+
   // Calculate dynamic adjustments based on Time-of-Day mode
   const baseAdjustments: ImageAdjustments = currentLocation?.adjustments || DEFAULT_ADJUSTMENTS;
   let dynamicAdjustments: ImageAdjustments = { ...baseAdjustments };
@@ -1078,13 +1105,29 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     <div className="public-viewer-page">
       {/* Top Glassmorphic Navigation Bar */}
       <div className="smart-portal-header">
-        {/* Left Branding Logo */}
+        {/* Left Branding & Controls */}
         <div className="smart-portal-brand">
+          {/* Back to Dashboard Button (Shifted to Left) */}
+          <button
+            onClick={onBack}
+            className="smart-tool-btn"
+            style={{ width: '2.25rem', height: '2.25rem', color: '#c7d2fe' }}
+            title="Back to Dashboard"
+          >
+            <ArrowLeft size={16} />
+          </button>
+
+          {/* Left Navbar Open/Close Toggle Button */}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="smart-tool-btn"
-            style={{ width: '2.25rem', height: '2.25rem' }}
-            title={sidebarOpen ? 'Hide Menu' : 'Show Menu'}
+            className={`smart-tool-btn ${sidebarOpen ? 'active' : ''}`}
+            style={{
+              width: '2.25rem',
+              height: '2.25rem',
+              background: sidebarOpen ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(168, 85, 247, 0.4))' : undefined,
+              borderColor: sidebarOpen ? 'rgba(99, 102, 241, 0.7)' : undefined
+            }}
+            title={sidebarOpen ? 'Close Menu' : 'Open Menu'}
           >
             {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
           </button>
@@ -1110,8 +1153,6 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             )}
           </div>
         </div>
-
-
 
         {/* Center Category Nav Pills */}
         <div className="smart-nav-pills">
@@ -1159,10 +1200,22 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           </button>
         </div>
 
-        {/* Right Controls (Dropdowns, Time-of-Day, Share, Fullscreen, Back) */}
+        {/* Right Controls (Right Navbar Toggle, Share, Fullscreen) */}
         <div className="smart-top-right">
-
-
+          {/* Right Locations Navbar Open/Close Toggle Button */}
+          <button
+            onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
+            className={`smart-tool-btn ${rightSidebarOpen ? 'active' : ''}`}
+            style={{
+              width: '2.25rem',
+              height: '2.25rem',
+              background: rightSidebarOpen ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(168, 85, 247, 0.4))' : undefined,
+              borderColor: rightSidebarOpen ? 'rgba(99, 102, 241, 0.7)' : undefined
+            }}
+            title={rightSidebarOpen ? "Close Locations Navbar" : "Open Locations Navbar"}
+          >
+            <Compass size={16} className={rightSidebarOpen ? 'text-indigo-300' : ''} />
+          </button>
 
           {/* Share Button */}
           <button
@@ -1182,16 +1235,6 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             title="Toggle Fullscreen"
           >
             {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-          </button>
-
-          {/* Back to Dashboard */}
-          <button
-            onClick={onBack}
-            className="smart-tool-btn"
-            style={{ width: '2.25rem', height: '2.25rem', color: '#a5b4fc' }}
-            title="Back to Dashboard"
-          >
-            <ArrowLeft size={15} />
           </button>
         </div>
       </div>
@@ -1298,6 +1341,150 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         </div>
       </div>
 
+      {/* Right Collapsible Glassmorphic Sidebar (Fixed to Right Side) */}
+      <div className={`smart-portal-right-sidebar ${rightSidebarOpen ? 'open' : 'collapsed'}`}>
+        <div className="smart-sidebar-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>ALL LOCATIONS</span>
+          <span style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 600, background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: '10px' }}>
+            {sortedLocations.length} SPACES
+          </span>
+        </div>
+
+        {/* Locations List Items */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          overflowY: 'auto',
+          paddingRight: '4px',
+          flex: 1,
+          scrollbarWidth: 'thin'
+        }}>
+          {sortedLocations.map((loc: any, idx: number) => {
+            const isCurrent = currentLocation?.id === loc.id;
+            const thumb = (loc.thumbnailPath || loc.thumbnailUrl)
+              ? toCloudFrontUrl(loc.thumbnailPath || loc.thumbnailUrl)
+              : loc.stitchedPanoPath
+                ? toCloudFrontUrl(loc.stitchedPanoPath)
+                : (loc.directions?.F?.[0]?.path || (Object.values(loc.directions || {}).flat() as any)[0]?.path)
+                  ? toCloudFrontUrl(loc.directions?.F?.[0]?.path || (Object.values(loc.directions || {}).flat() as any)[0]?.path)
+                  : '';
+
+            return (
+              <div
+                key={loc.id}
+                onClick={() => handleQuickExploreNavigate(loc.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '7px 9px',
+                  borderRadius: '12px',
+                  background: isCurrent
+                    ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.35) 0%, rgba(168, 85, 247, 0.25) 100%)'
+                    : 'rgba(255, 255, 255, 0.03)',
+                  border: isCurrent
+                    ? '1px solid rgba(99, 102, 241, 0.7)'
+                    : '1px solid rgba(255, 255, 255, 0.07)',
+                  boxShadow: isCurrent
+                    ? '0 4px 16px rgba(99, 102, 241, 0.35)'
+                    : '0 2px 8px rgba(0, 0, 0, 0.3)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  position: 'relative'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isCurrent) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    e.currentTarget.style.transform = 'translateX(-3px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isCurrent) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.07)';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                  }
+                }}
+              >
+                {/* Thumbnail */}
+                <div style={{
+                  width: '60px',
+                  height: '40px',
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  background: '#070913',
+                  border: isCurrent ? '1px solid #818cf8' : '1px solid rgba(255, 255, 255, 0.15)',
+                  flexShrink: 0,
+                  position: 'relative'
+                }}>
+                  {thumb ? (
+                    <img
+                      src={thumb}
+                      alt={loc.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>
+                      🌐
+                    </div>
+                  )}
+                  {isCurrent && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '3px',
+                      left: '3px',
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      background: '#10b981',
+                      boxShadow: '0 0 6px #10b981'
+                    }} />
+                  )}
+                </div>
+
+                {/* Details */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: '0.8rem',
+                    fontWeight: isCurrent ? 800 : 600,
+                    color: isCurrent ? '#ffffff' : '#e2e8f0',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {loc.name}
+                  </div>
+                  <div style={{
+                    fontSize: '0.67rem',
+                    color: isCurrent ? '#a5b4fc' : '#94a3b8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    marginTop: '2px'
+                  }}>
+                    <span>{isCurrent ? 'Viewing Now' : `Space #${idx + 1}`}</span>
+                    {loc.hotspots && loc.hotspots.length > 0 && (
+                      <span>• {loc.hotspots.length} hotspots</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Chevron */}
+                <div style={{
+                  color: isCurrent ? '#818cf8' : '#64748b',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  <ChevronRight size={14} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* 360 Canvas View with 3D Beacons */}
       <div className="public-viewer-canvas" id="viewer-canvas-container">
         <Viewer360
@@ -1315,6 +1502,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             if (targetLoc) handleLocationChange(targetLoc.id);
           }}
           onEditHotspot={handleOpenEditHotspot}
+          galleryPhotos={galleryPhotos}
         />
       </div>
 

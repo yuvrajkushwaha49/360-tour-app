@@ -27,9 +27,196 @@ import {
   Waves,
   Trees,
   Navigation2,
-  ChevronRight
+  ChevronRight,
+  ChevronLeft
 } from 'lucide-react';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
+
+const HotspotPhotoSlider: React.FC<{ photos: string[] }> = ({ photos }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+
+  const validPhotos = React.useMemo(() => {
+    return (photos || []).slice(0, 5);
+  }, [photos]);
+
+  React.useEffect(() => {
+    if (!validPhotos || validPhotos.length <= 1 || isHovered) return;
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % validPhotos.length);
+    }, 2600);
+    return () => clearInterval(interval);
+  }, [validPhotos, isHovered]);
+
+  if (!validPhotos || validPhotos.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '135px',
+        borderRadius: '10px',
+        overflow: 'hidden',
+        background: '#070913',
+        border: '1px solid rgba(255, 255, 255, 0.12)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+        marginBottom: '2px',
+        flexShrink: 0
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Sliding Images */}
+      {validPhotos.map((photo, idx) => {
+        const isActive = idx === currentIndex;
+        return (
+          <img
+            key={idx}
+            src={toCloudFrontUrl(photo)}
+            alt={`Hotspot Photo ${idx + 1}`}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              opacity: isActive ? 1 : 0,
+              transform: isActive ? 'scale(1)' : 'scale(1.06)',
+              transition: 'opacity 0.45s ease-in-out, transform 0.6s ease-out',
+              pointerEvents: isActive ? 'auto' : 'none'
+            }}
+          />
+        );
+      })}
+
+      {/* Gradient Overlay for Text Legibility */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, transparent 40%, rgba(0,0,0,0.65) 100%)',
+        pointerEvents: 'none'
+      }} />
+
+      {/* Photo Counter Badge */}
+      <div style={{
+        position: 'absolute',
+        top: '6px',
+        right: '6px',
+        background: 'rgba(0, 0, 0, 0.65)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        border: '1px solid rgba(255, 255, 255, 0.15)',
+        color: '#ffffff',
+        fontSize: '0.62rem',
+        fontWeight: 700,
+        padding: '2px 6px',
+        borderRadius: '8px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        zIndex: 5
+      }}>
+        <span>📷</span>
+        <span>{currentIndex + 1}/{validPhotos.length}</span>
+      </div>
+
+      {/* Left Arrow Button */}
+      {validPhotos.length > 1 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setCurrentIndex((prev) => (prev - 1 + validPhotos.length) % validPhotos.length);
+          }}
+          style={{
+            position: 'absolute',
+            left: '6px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: '24px',
+            height: '24px',
+            borderRadius: '50%',
+            background: 'rgba(0, 0, 0, 0.6)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            color: '#ffffff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            opacity: isHovered ? 1 : 0.7,
+            transition: 'opacity 0.2s ease',
+            zIndex: 6
+          }}
+        >
+          <ChevronLeft size={13} />
+        </button>
+      )}
+
+      {/* Right Arrow Button */}
+      {validPhotos.length > 1 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setCurrentIndex((prev) => (prev + 1) % validPhotos.length);
+          }}
+          style={{
+            position: 'absolute',
+            right: '6px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: '24px',
+            height: '24px',
+            borderRadius: '50%',
+            background: 'rgba(0, 0, 0, 0.6)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            color: '#ffffff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            opacity: isHovered ? 1 : 0.7,
+            transition: 'opacity 0.2s ease',
+            zIndex: 6
+          }}
+        >
+          <ChevronRight size={13} />
+        </button>
+      )}
+
+      {/* Bottom Dot Indicators */}
+      {validPhotos.length > 1 && (
+        <div style={{
+          position: 'absolute',
+          bottom: '6px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          gap: '4px',
+          zIndex: 6
+        }}>
+          {validPhotos.map((_, idx) => (
+            <div
+              key={idx}
+              onClick={(e) => { e.stopPropagation(); setCurrentIndex(idx); }}
+              style={{
+                width: idx === currentIndex ? '14px' : '5px',
+                height: '5px',
+                borderRadius: '999px',
+                background: idx === currentIndex ? '#6366f1' : 'rgba(255, 255, 255, 0.5)',
+                boxShadow: idx === currentIndex ? '0 0 6px #6366f1' : 'none',
+                transition: 'all 0.2s ease',
+                cursor: 'pointer'
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface ProjectImage {
   name: string;
@@ -429,7 +616,8 @@ const RoadArrowBanner = ({
   onEditHotspot,
   onDeleteHotspot,
   onAddAreaOutline,
-  onNavigate
+  onNavigate,
+  galleryPhotos
 }: {
   start: [number, number, number];
   end: [number, number, number];
@@ -444,6 +632,7 @@ const RoadArrowBanner = ({
   onDeleteHotspot: (id: string) => void;
   onAddAreaOutline: (hs: HotspotItem) => void;
   onNavigate: (targetId: string) => void;
+  galleryPhotos?: string[];
 }) => {
   const groupRef = React.useRef<THREE.Group>(null);
 
@@ -591,19 +780,26 @@ const RoadArrowBanner = ({
               background: 'rgba(15, 17, 26, 0.95)',
               backdropFilter: 'blur(8px)',
               border: '1px solid #1f2330',
-              borderRadius: '8px',
-              padding: '12px 16px',
-              width: '240px',
+              borderRadius: '12px',
+              padding: '12px 14px',
+              width: '260px',
               color: 'white',
               boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
               zIndex: 100,
-              pointerEvents: 'auto'
+              pointerEvents: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              {/* 5 Photos Sliding Carousel (from Gallery) */}
+              {galleryPhotos && galleryPhotos.length > 0 && (
+                <HotspotPhotoSlider photos={galleryPhotos} />
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#a5b4fc' }}>{h.name}</span>
               </div>
               {h.area && (
-                <div style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 'bold', marginBottom: '6px' }}>
+                <div style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 'bold', marginBottom: '4px' }}>
                   📐 Area: {h.area}
                 </div>
               )}
@@ -670,6 +866,7 @@ interface SceneGroupProps {
   areaType: 'building' | 'river' | 'road';
   isPreloading?: boolean;
   readOnly?: boolean;
+  galleryPhotos?: string[];
 }
 
 const SceneGroup: React.FC<SceneGroupProps> = ({
@@ -692,7 +889,8 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
   onAddAreaOutline,
   areaType,
   isPreloading = false,
-  readOnly = false
+  readOnly = false,
+  galleryPhotos = []
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const [activeInfoId, setActiveInfoId] = useState<string | null>(null);
@@ -1036,6 +1234,11 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                             gap: '8px'
                           }}
                         >
+                          {/* 5 Photos Sliding Carousel (from Gallery) just on top of details */}
+                          {galleryPhotos && galleryPhotos.length > 0 && (
+                            <HotspotPhotoSlider photos={galleryPhotos} />
+                          )}
+
                           {/* Card Top Title Row */}
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1361,6 +1564,7 @@ interface Viewer360Props {
   autoRotate?: boolean;
   onOpenAdjustments?: () => void;
   onImageNotFound?: () => void;
+  galleryPhotos?: string[];
 }
 
 export interface Viewer360Ref {
@@ -1413,10 +1617,12 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
   onAddAreaOutline = () => { },
   areaType = 'building',
   readOnly = false,
-  onOpenAdjustments,
-  onImageNotFound
+  autoRotate: propAutoRotate = false,
+  onOpenAdjustments = () => { },
+  onImageNotFound = () => { },
+  galleryPhotos = []
 }, ref) => {
-  const [autoRotate, setAutoRotate] = useState(false);
+  const [autoRotate, setAutoRotate] = useState(propAutoRotate);
   const [heading, setHeading] = useState(0);
   const [imageMissingError, setImageMissingError] = useState<boolean>(false);
   const [countdown, setCountdown] = useState<number>(4);
@@ -1910,6 +2116,7 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
           areaType={areaType}
           isPreloading={isPreloading}
           readOnly={readOnly}
+          galleryPhotos={galleryPhotos}
         />
         <OrbitControls
           ref={controlsRef}
