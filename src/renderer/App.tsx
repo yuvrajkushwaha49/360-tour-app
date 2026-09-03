@@ -43,6 +43,7 @@ import ClientLoginPage from './components/ClientLoginPage';
 import { exportProjectToZip } from './utils/exportZip';
 import { API_BASE_URL, toCloudFrontUrl } from './utils/apiConfig';
 import { saveLargeDraft, loadLargeDraft, deleteLargeDraft, safeLocalStorageSet, safeLocalStorageGet } from './utils/dbStorage';
+import { uploadFileWithFallback, uploadBatchWithFallback } from './utils/uploadWithFallback';
 
 interface ProjectImage {
   name: string;
@@ -412,26 +413,25 @@ export default function App() {
 
         let imgs: ProjectImage[] = [];
 
-        // Attempt direct S3 / Server Batch Upload
+        // Attempt direct S3 / Server Batch Upload with fallback confirmation
         try {
           const formData = new FormData();
           files.forEach(f => formData.append('files', f));
 
-          const res = await fetch(`${API_BASE_URL}/api/upload-batch`, {
-            method: 'POST',
-            body: formData
-          });
+          const data = await uploadBatchWithFallback(
+            `${API_BASE_URL}/api/upload-batch`,
+            formData
+          );
 
-          if (res.ok) {
-            const data = await res.json();
-            imgs = (data.files || []).map((f: any) => ({
-              name: f.name,
-              path: f.path
-            }));
-            addLog(`☁️ Successfully uploaded ${imgs.length} photo(s) directly to AWS S3 Cloud Storage!`);
+          imgs = (data.files || []).map((f: any) => ({
+            name: f.name,
+            path: f.path
+          }));
+          addLog(`☁️ Successfully uploaded ${imgs.length} photo(s) (Storage: ${data.files?.[0]?.storage || 'cloud'})!`);
+        } catch (uploadErr: any) {
+          if (!uploadErr.message?.includes('cancelled')) {
+            console.warn('Direct upload error:', uploadErr);
           }
-        } catch (uploadErr) {
-          console.warn('Direct S3 upload fallback to base64:', uploadErr);
         }
 
         // Fallback to local Base64 reader if offline or server upload failed
@@ -933,23 +933,20 @@ export default function App() {
       formData.append('file', file);
 
       const token = authToken || localStorage.getItem('crm_token');
-      const response = await fetch(`${API_BASE_URL}/api/upload`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData
-      });
+      const data = await uploadFileWithFallback(
+        `${API_BASE_URL}/api/upload`,
+        formData,
+        token ? { Authorization: `Bearer ${token}` } : {}
+      );
 
-      if (!response.ok) {
-        throw new Error('Failed to upload custom icon');
-      }
-
-      const data = await response.json();
       const iconUrl = data.url || data.path;
       setHotspotCustomIconUrl(iconUrl);
       addLog(`Custom icon uploaded successfully: ${file.name}`);
     } catch (err: any) {
-      console.error('Custom icon upload error:', err);
-      alert('Error uploading custom icon: ' + (err.message || 'Unknown error'));
+      if (!err.message?.includes('cancelled')) {
+        console.error('Custom icon upload error:', err);
+        alert('Error uploading custom icon: ' + (err.message || 'Unknown error'));
+      }
     } finally {
       setIsUploadingCustomIcon(false);
     }

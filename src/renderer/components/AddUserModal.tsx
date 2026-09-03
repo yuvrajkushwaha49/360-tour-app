@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { X, UserPlus, Mail, User, Lock, CheckCircle2, Building2, Eye, EyeOff, Sparkles, UploadCloud, ImageIcon, Trash2 } from 'lucide-react';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
+import { uploadFileWithFallback } from '../utils/uploadWithFallback';
 
 interface AddUserModalProps {
   isOpen: boolean;
@@ -36,22 +37,17 @@ export default function AddUserModal({ isOpen, token, onClose, onSuccess }: AddU
 
     try {
       const activeToken = token || localStorage.getItem('crm_token');
-      const response = await fetch(`${API_BASE_URL}/api/upload`, {
-        method: 'POST',
-        headers: {
-          ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {})
-        },
-        body: formData
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to upload logo.');
-      }
+      const data = await uploadFileWithFallback(
+        `${API_BASE_URL}/api/upload`,
+        formData,
+        activeToken ? { Authorization: `Bearer ${activeToken}` } : {}
+      );
 
       setLogoUrl(data.url);
     } catch (err: any) {
-      setError(err.message || 'Logo upload failed');
+      if (!err.message?.includes('cancelled')) {
+        setError(err.message || 'Logo upload failed');
+      }
     } finally {
       setIsUploadingLogo(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

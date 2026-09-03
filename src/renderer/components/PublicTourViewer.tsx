@@ -37,6 +37,7 @@ import {
 import Viewer360 from './Viewer360';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
 import { ImageAdjustments, DEFAULT_ADJUSTMENTS } from '../utils/imageAdjustmentEngine';
+import { uploadFileWithFallback } from '../utils/uploadWithFallback';
 
 interface PublicTourViewerProps {
   tourId: string;
@@ -166,20 +167,19 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await fetch(`${API_BASE_URL}/api/upload`, {
-        method: 'POST',
-        headers: {
-          Authorization: token ? `Bearer ${token}` : ''
-        },
-        body: formData
-      });
+      const resData = await uploadFileWithFallback(
+        `${API_BASE_URL}/api/upload`,
+        formData,
+        token ? { Authorization: `Bearer ${token}` } : {}
+      );
 
-      const resData = await res.json();
-      if (!res.ok) throw new Error(resData.error || 'Failed to upload master plan image');
-
-      setMpImage(resData.url);
+      if (resData && resData.url) {
+        setMpImage(resData.url);
+      }
     } catch (err: any) {
-      alert(err.message || 'Image upload failed');
+      if (!err.message?.includes('cancelled')) {
+        alert(err.message || 'Image upload failed');
+      }
     } finally {
       setIsUploadingMp(false);
     }
@@ -239,16 +239,13 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         const formData = new FormData();
         formData.append('file', files[i]);
 
-        const res = await fetch(`${API_BASE_URL}/api/upload`, {
-          method: 'POST',
-          headers: {
-            Authorization: token ? `Bearer ${token}` : ''
-          },
-          body: formData
-        });
+        const resData = await uploadFileWithFallback(
+          `${API_BASE_URL}/api/upload`,
+          formData,
+          token ? { Authorization: `Bearer ${token}` } : {}
+        );
 
-        const resData = await res.json();
-        if (res.ok && resData.url) {
+        if (resData && resData.url) {
           newUrls.push(resData.url);
         }
       }

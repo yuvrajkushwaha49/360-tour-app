@@ -57,17 +57,21 @@ function getPublicAssetUrl(key) {
   return `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key}`;
 }
 
-if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && S3_BUCKET) {
+if (S3_BUCKET) {
   try {
     const { S3Client } = require('@aws-sdk/client-s3');
-    s3Client = new S3Client({
-      region: S3_REGION,
-      credentials: {
+    const s3Config = { region: S3_REGION };
+    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+      s3Config.credentials = {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID.trim(),
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY.trim()
-      }
-    });
-    console.log(`[AWS S3] ✅ S3 Client initialized successfully!`);
+      };
+      console.log(`[AWS S3] ✅ S3 Client initialized with explicit Access Key ID!`);
+    } else {
+      console.log(`[AWS S3] ℹ️ S3 Client initialized using AWS Default Credential Chain (IAM Role / System).`);
+    }
+
+    s3Client = new S3Client(s3Config);
     console.log(`         Bucket: ${S3_BUCKET}`);
     console.log(`         Region: ${S3_REGION}`);
     if (CLOUDFRONT_DOMAIN) {
@@ -77,10 +81,7 @@ if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && S3_BUC
     console.warn('[AWS S3 Error]: Could not initialize S3 Client:', e.message);
   }
 } else {
-  console.log('[AWS S3 Status]: S3 environment variables not fully set. Using local server disk (/uploads/).');
-  console.log(`         AWS_ACCESS_KEY_ID present: ${!!process.env.AWS_ACCESS_KEY_ID}`);
-  console.log(`         AWS_SECRET_ACCESS_KEY present: ${!!process.env.AWS_SECRET_ACCESS_KEY}`);
-  console.log(`         AWS_S3_BUCKET_NAME: "${S3_BUCKET}"`);
+  console.log('[AWS S3 Status]: AWS_S3_BUCKET_NAME is not set in environment.');
 }
 
 // Configure multer for file uploads
@@ -115,6 +116,8 @@ app.post('/api/upload', (req, res, next) => {
       return res.status(400).json({ error: 'No file provided for upload.' });
     }
 
+    const allowFallback = req.body.allowFallback === 'true' || req.query.allowFallback === 'true';
+
     if (s3Client && S3_BUCKET) {
       try {
         const { PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -148,8 +151,19 @@ app.post('/api/upload', (req, res, next) => {
       }
     }
 
-    // Fallback to local server upload URL
+    // S3 unavailable or failed: Check if user has confirmed server fallback
+    if (!allowFallback) {
+      // Clean up temporary file until user confirms
+      fs.unlink(req.file.path, () => {});
+      return res.status(409).json({
+        fallbackRequired: true,
+        message: 'AWS S3 Cloud Storage is currently unavailable or encountered an issue. Would you like to save this file directly to the local server disk as a fallback?'
+      });
+    }
+
+    // User confirmed fallback -> Save to local server disk
     const localUrl = `/uploads/${req.file.filename}`;
+    console.log(`[Local Storage Fallback] ✅ User confirmed fallback: ${localUrl}`);
     res.json({
       url: localUrl,
       filename: req.file.filename,
@@ -168,10 +182,13 @@ app.post('/api/upload-batch', upload.array('files', 100), async (req, res) => {
     return res.status(400).json({ error: 'No files provided.' });
   }
 
-  console.log(`[Upload Batch] Received ${files.length} file(s) for upload...`);
+  const allowFallback = req.body.allowFallback === 'true' || req.query.allowFallback === 'true';
+  console.log(`[Upload Batch] Received ${files.length} file(s) for upload... (allowFallback: ${allowFallback})`);
   const results = [];
+  let s3Failures = 0;
 
   for (const file of files) {
+    let uploadedToS3 = false;
     if (s3Client && S3_BUCKET) {
       try {
         const { PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -188,23 +205,36 @@ app.post('/api/upload-batch', upload.array('files', 100), async (req, res) => {
           CacheControl: 'public, max-age=31536000, immutable'
         };
 
-        console.log(`[AWS S3] Uploading "${file.originalname}" -> s3://${S3_BUCKET}/${key}`);
         await s3Client.send(new PutObjectCommand(uploadParams));
         fs.unlink(file.path, () => {});
 
         const assetUrl = getPublicAssetUrl(key);
-        console.log(`[CloudFront/S3] ✅ CDN Asset URL: ${assetUrl}`);
         results.push({ name: file.originalname, path: assetUrl, storage: CLOUDFRONT_DOMAIN ? 'cloudfront' : 's3' });
-        continue;
+        uploadedToS3 = true;
       } catch (err) {
         console.error(`[AWS S3 Error] Failed to upload ${file.originalname}:`, err.message);
+        s3Failures++;
       }
     } else {
-      console.warn(`[Local Fallback] S3 not active (s3Client: ${!!s3Client}, bucket: "${S3_BUCKET}"). Saving to local server disk.`);
+      s3Failures++;
     }
 
-    // Local server storage fallback
-    results.push({ name: file.originalname, path: `/uploads/${file.filename}`, storage: 'local' });
+    if (!uploadedToS3) {
+      if (!allowFallback) {
+        // Delete temporary file since fallback not yet confirmed
+        fs.unlink(file.path, () => {});
+      } else {
+        results.push({ name: file.originalname, path: `/uploads/${file.filename}`, storage: 'local' });
+      }
+    }
+  }
+
+  // If S3 failed and fallback is not yet confirmed by user
+  if (s3Failures > 0 && !allowFallback && results.length < files.length) {
+    return res.status(409).json({
+      fallbackRequired: true,
+      message: 'AWS S3 Cloud Storage is currently unavailable or encountered an issue. Would you like to save these files directly to the local server disk as a fallback?'
+    });
   }
 
   res.json({ files: results });
@@ -217,6 +247,37 @@ app.use('/uploads', cors(), express.static(UPLOADS_DIR, {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   }
 }));
+
+// Diagnostic endpoint to check AWS S3 status & connectivity
+app.get('/api/s3-status', cors(), async (req, res) => {
+  const status = {
+    s3Bucket: S3_BUCKET || '(not configured)',
+    region: S3_REGION,
+    cloudfrontDomain: CLOUDFRONT_DOMAIN || '(not configured)',
+    hasAccessKeyId: !!process.env.AWS_ACCESS_KEY_ID,
+    hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
+    s3ClientInitialized: !!s3Client
+  };
+
+  if (s3Client && S3_BUCKET) {
+    try {
+      const { HeadBucketCommand } = require('@aws-sdk/client-s3');
+      await s3Client.send(new HeadBucketCommand({ Bucket: S3_BUCKET }));
+      status.s3Connection = 'CONNECTED_SUCCESSFULLY';
+    } catch (err) {
+      status.s3Connection = 'CONNECTION_FAILED';
+      status.error = {
+        name: err.name,
+        message: err.message,
+        code: err.$metadata?.httpStatusCode
+      };
+    }
+  } else {
+    status.s3Connection = 'NOT_INITIALIZED';
+  }
+
+  res.json(status);
+});
 
 // Local file proxy endpoint (safely streams local Windows/project files over CORS for web browser & Electron)
 app.get('/api/local-image', cors(), (req, res) => {
