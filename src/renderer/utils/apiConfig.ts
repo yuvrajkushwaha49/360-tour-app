@@ -18,9 +18,18 @@ export const API_BASE_URL = getApiBaseUrl();
 
 export const CLOUDFRONT_DOMAIN = 'd23x4xy9audncu.cloudfront.net';
 
-// Automatically transform S3 direct URLs into high-speed CloudFront CDN URLs
+// Automatically transform S3 / CloudFront URLs into high-speed, zero-CORS proxy URLs
 export function toCloudFrontUrl(url: string): string {
   if (!url || typeof url !== 'string') return url;
+
+  // On live web domain (e.g. virtual.kalaakchar.in), route via /cdn/ for 100% CORS-free proxying
+  if (typeof window !== 'undefined' && window.location.hostname.includes('virtual.kalaakchar.in')) {
+    // Replace S3 or CloudFront URLs with /cdn/<key>
+    if (url.includes('cloudfront.net/') || url.includes('.amazonaws.com/')) {
+      return url.replace(/^https?:\/\/[^\/]+\//, '/cdn/');
+    }
+  }
+
   if (!CLOUDFRONT_DOMAIN) return url;
   
   // Transforms https://<bucket>.s3.<region>.amazonaws.com/<key> -> https://<cloudfront>/<key>
