@@ -37,7 +37,12 @@ import {
   Clock,
   MapPin,
   Plus,
-  Filter
+  Filter,
+  Download,
+  FileDown,
+  FolderDown,
+  File,
+  ExternalLink
 } from 'lucide-react';
 import Viewer360, { Viewer360Ref } from './Viewer360';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
@@ -50,6 +55,16 @@ export interface ConnectivityItem {
   category: 'road' | 'rail' | 'air' | 'sea' | 'metro';
   distance: string;
   description: string;
+}
+
+export interface DownloadItem {
+  id: string;
+  title: string;
+  category: 'brochure' | 'masterplan' | 'floorplan' | 'legal' | 'report';
+  fileUrl: string;
+  fileSize?: string;
+  fileType?: string;
+  description?: string;
 }
 
 interface PublicTourViewerProps {
@@ -93,6 +108,20 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [connFormDesc, setConnFormDesc] = useState<string>('');
   const [connCategoryFilter, setConnCategoryFilter] = useState<string>('all');
   const [isSavingConnectivity, setIsSavingConnectivity] = useState<boolean>(false);
+
+  // Downloads & Documents States
+  const [downloadsList, setDownloadsList] = useState<DownloadItem[]>([]);
+  const [isEditingDownload, setIsEditingDownload] = useState<boolean>(false);
+  const [editingDownloadItem, setEditingDownloadItem] = useState<DownloadItem | null>(null);
+  const [dlFormTitle, setDlFormTitle] = useState<string>('');
+  const [dlFormCategory, setDlFormCategory] = useState<'brochure' | 'masterplan' | 'floorplan' | 'legal' | 'report'>('brochure');
+  const [dlFormFileUrl, setDlFormFileUrl] = useState<string>('');
+  const [dlFormFileSize, setDlFormFileSize] = useState<string>('');
+  const [dlFormFileType, setDlFormFileType] = useState<string>('PDF');
+  const [dlFormDesc, setDlFormDesc] = useState<string>('');
+  const [dlCategoryFilter, setDlCategoryFilter] = useState<string>('all');
+  const [isUploadingDlFile, setIsUploadingDlFile] = useState<boolean>(false);
+  const [isSavingDownload, setIsSavingDownload] = useState<boolean>(false);
 
   // Check if current logged-in user is admin
   const currentUser = (() => {
@@ -182,6 +211,11 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       // Initialize Connectivity
       if (data.tourData?.connectivity && Array.isArray(data.tourData.connectivity)) {
         setConnectivityList(data.tourData.connectivity);
+      }
+
+      // Initialize Downloads
+      if (data.tourData?.downloads && Array.isArray(data.tourData.downloads)) {
+        setDownloadsList(data.tourData.downloads);
       }
 
       const locations = data.tourData?.locations || [];
@@ -468,6 +502,164 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     }
   };
 
+  // Downloads Handlers
+  const handleUploadDownloadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingDlFile(true);
+    try {
+      const token = localStorage.getItem('crm_token') || localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const resData = await uploadFileWithFallback(
+        `${API_BASE_URL}/api/upload`,
+        formData,
+        token ? { Authorization: `Bearer ${token}` } : {}
+      );
+
+      if (resData && resData.url) {
+        setDlFormFileUrl(resData.url);
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+        setDlFormFileSize(`${sizeMb} MB`);
+        const ext = file.name.split('.').pop()?.toUpperCase() || 'PDF';
+        setDlFormFileType(ext);
+        if (!dlFormTitle) {
+          setDlFormTitle(file.name.replace(/\.[^/.]+$/, ''));
+        }
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to upload document file');
+    } finally {
+      setIsUploadingDlFile(false);
+    }
+  };
+
+  const handleOpenAddDownload = () => {
+    setEditingDownloadItem(null);
+    setDlFormTitle('');
+    setDlFormCategory('brochure');
+    setDlFormFileUrl('');
+    setDlFormFileSize('');
+    setDlFormFileType('PDF');
+    setDlFormDesc('');
+    setIsEditingDownload(true);
+  };
+
+  const handleOpenEditDownload = (item: DownloadItem) => {
+    setEditingDownloadItem(item);
+    setDlFormTitle(item.title);
+    setDlFormCategory(item.category);
+    setDlFormFileUrl(item.fileUrl);
+    setDlFormFileSize(item.fileSize || '');
+    setDlFormFileType(item.fileType || 'PDF');
+    setDlFormDesc(item.description || '');
+    setIsEditingDownload(true);
+  };
+
+  const handleSaveDownloadItem = async () => {
+    if (!dlFormTitle.trim()) {
+      alert('Please enter a title for the document.');
+      return;
+    }
+    if (!dlFormFileUrl.trim()) {
+      alert('Please upload a file or enter a document URL.');
+      return;
+    }
+
+    setIsSavingDownload(true);
+    try {
+      let updatedList: DownloadItem[];
+      if (editingDownloadItem) {
+        updatedList = downloadsList.map(item =>
+          item.id === editingDownloadItem.id
+            ? {
+                ...item,
+                title: dlFormTitle.trim(),
+                category: dlFormCategory,
+                fileUrl: dlFormFileUrl.trim(),
+                fileSize: dlFormFileSize.trim() || '2.5 MB',
+                fileType: dlFormFileType.trim() || 'PDF',
+                description: dlFormDesc.trim()
+              }
+            : item
+        );
+      } else {
+        const newItem: DownloadItem = {
+          id: `dl_${Date.now()}`,
+          title: dlFormTitle.trim(),
+          category: dlFormCategory,
+          fileUrl: dlFormFileUrl.trim(),
+          fileSize: dlFormFileSize.trim() || '2.5 MB',
+          fileType: dlFormFileType.trim() || 'PDF',
+          description: dlFormDesc.trim()
+        };
+        updatedList = [...downloadsList, newItem];
+      }
+
+      const token = localStorage.getItem('crm_token') || localStorage.getItem('token');
+      const updatedTourData = {
+        ...(tourData || {}),
+        downloads: updatedList
+      };
+
+      await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          name: tourName,
+          data: updatedTourData
+        })
+      });
+
+      setDownloadsList(updatedList);
+      setTourData(updatedTourData);
+      setIsEditingDownload(false);
+      setEditingDownloadItem(null);
+      setDlFormTitle('');
+      setDlFormFileUrl('');
+      setDlFormDesc('');
+    } catch (err: any) {
+      alert(err.message || 'Failed to save document');
+    } finally {
+      setIsSavingDownload(false);
+    }
+  };
+
+  const handleDeleteDownloadItem = async (idToDelete: string) => {
+    if (!confirm('Are you sure you want to remove this document?')) return;
+
+    const updatedList = downloadsList.filter(item => item.id !== idToDelete);
+    try {
+      const token = localStorage.getItem('crm_token') || localStorage.getItem('token');
+      const updatedTourData = {
+        ...(tourData || {}),
+        downloads: updatedList
+      };
+
+      await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          name: tourName,
+          data: updatedTourData
+        })
+      });
+
+      setDownloadsList(updatedList);
+      setTourData(updatedTourData);
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete document');
+    }
+  };
+
   const copyShareLink = () => {
     const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
     const url = `${base}/api/tours/${tourId}`;
@@ -715,6 +907,13 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <ImageIcon size={14} />
             <span>Gallery</span>
           </button>
+          <button
+            onClick={() => setActiveNavTab('downloads')}
+            className={`smart-nav-btn ${activeNavTab === 'downloads' ? 'active' : ''}`}
+          >
+            <FolderDown size={14} />
+            <span>Downloads</span>
+          </button>
         </div>
 
         {/* Right Controls (Dropdowns, Time-of-Day, Share, Fullscreen, Back) */}
@@ -819,8 +1018,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             </div>
           </div>
 
-          <div className="smart-menu-item" onClick={copyShareLink}>
-            <div className="smart-menu-icon"><FileText size={15} /></div>
+          <div className="smart-menu-item" onClick={() => setActiveNavTab('downloads')}>
+            <div className="smart-menu-icon"><FolderDown size={15} /></div>
             <div>
               <div className="smart-menu-label">DOWNLOADS</div>
               <div className="smart-menu-sub">Brochures & documents</div>
@@ -1919,7 +2118,550 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         </div>
       )}
 
-      {/* 4. LIGHTBOX FULLSCREEN PHOTO VIEWER */}
+      {/* 4. DOWNLOADS & PROJECT BROCHURES MODAL OVERLAY */}
+      {activeNavTab === 'downloads' && (
+        <div className="smart-content-overlay" onClick={() => { if (!isEditingDownload) setActiveNavTab('overview'); }}>
+          <div className="smart-content-modal" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="smart-content-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'rgba(99, 102, 241, 0.18)',
+                  border: '1px solid rgba(99, 102, 241, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#818cf8'
+                }}>
+                  <FolderDown size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '0.02em' }}>
+                    BROCHURES & PROJECT DOWNLOADS
+                  </h3>
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+                    Official e-brochures, master plans, floor layouts, and project documents for {displayName}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {isAdmin && !isEditingDownload && (
+                  <button
+                    onClick={handleOpenAddDownload}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                      border: 'none',
+                      color: '#ffffff',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)'
+                    }}
+                  >
+                    <Plus size={14} />
+                    <span>Upload Document</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => {
+                    setIsEditingDownload(false);
+                    setActiveNavTab('overview');
+                  }}
+                  className="smart-close-btn"
+                  title="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="smart-content-modal-body">
+              {/* Category Filter Pills (when not editing) */}
+              {!isEditingDownload && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '1.25rem' }}>
+                  {[
+                    { id: 'all', label: 'All Documents', icon: FolderDown, count: downloadsList.length },
+                    { id: 'brochure', label: 'Project Brochures', icon: FileText, count: downloadsList.filter(d => d.category === 'brochure').length },
+                    { id: 'masterplan', label: 'Master Plans', icon: Map, count: downloadsList.filter(d => d.category === 'masterplan').length },
+                    { id: 'floorplan', label: 'Floor Plans & Layouts', icon: Building2, count: downloadsList.filter(d => d.category === 'floorplan').length },
+                    { id: 'legal', label: 'Legal & Approvals', icon: File, count: downloadsList.filter(d => d.category === 'legal').length },
+                    { id: 'report', label: 'Reports & Specs', icon: FileDown, count: downloadsList.filter(d => d.category === 'report').length }
+                  ].map(tab => {
+                    const IconComp = tab.icon;
+                    const isActive = dlCategoryFilter === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setDlCategoryFilter(tab.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 14px',
+                          borderRadius: '20px',
+                          fontSize: '0.76rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          background: isActive ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(255, 255, 255, 0.05)',
+                          border: isActive ? '1px solid #818cf8' : '1px solid rgba(255, 255, 255, 0.1)',
+                          color: isActive ? '#ffffff' : '#94a3b8',
+                          boxShadow: isActive ? '0 4px 12px rgba(99, 102, 241, 0.35)' : 'none'
+                        }}
+                      >
+                        <IconComp size={13} />
+                        <span>{tab.label}</span>
+                        {tab.count > 0 && (
+                          <span style={{
+                            background: isActive ? 'rgba(255, 255, 255, 0.25)' : 'rgba(255, 255, 255, 0.1)',
+                            borderRadius: '10px',
+                            padding: '1px 6px',
+                            fontSize: '0.66rem',
+                            fontWeight: 800
+                          }}>
+                            {tab.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add / Edit Download Form (Admin) */}
+              {isEditingDownload ? (
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  borderRadius: '1.25rem',
+                  padding: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1.25rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '0.75rem' }}>
+                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Edit3 size={16} className="text-indigo-400" />
+                      <span>{editingDownloadItem ? 'Edit Document Details' : 'Upload / Add New Document'}</span>
+                    </h4>
+                    <button
+                      onClick={() => setIsEditingDownload(false)}
+                      style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  {/* Category Type Selector */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px' }}>
+                      Document Category
+                    </label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {[
+                        { id: 'brochure', label: 'Project Brochure', icon: FileText, color: '#818cf8' },
+                        { id: 'masterplan', label: 'Master Plan PDF', icon: Map, color: '#34d399' },
+                        { id: 'floorplan', label: 'Floor Plan / Layout', icon: Building2, color: '#38bdf8' },
+                        { id: 'legal', label: 'Legal & Approvals', icon: File, color: '#fbbf24' },
+                        { id: 'report', label: 'Report / Specs', icon: FileDown, color: '#c084fc' }
+                      ].map(cat => {
+                        const IconComponent = cat.icon;
+                        const isSelected = dlFormCategory === cat.id;
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => setDlFormCategory(cat.id as any)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '8px 14px',
+                              borderRadius: '10px',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              background: isSelected ? 'rgba(99, 102, 241, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+                              border: isSelected ? `2px solid ${cat.color}` : '1px solid rgba(255, 255, 255, 0.1)',
+                              color: isSelected ? '#ffffff' : '#cbd5e1'
+                            }}
+                          >
+                            <IconComponent size={14} style={{ color: cat.color }} />
+                            <span>{cat.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Document Title */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Document Title *
+                    </label>
+                    <input
+                      type="text"
+                      value={dlFormTitle}
+                      onChange={(e) => setDlFormTitle(e.target.value)}
+                      placeholder="e.g. Official Project E-Brochure (2026 Edition)"
+                      style={{
+                        width: '100%',
+                        background: 'rgba(0, 0, 0, 0.4)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        color: '#ffffff',
+                        fontSize: '0.88rem',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  {/* File Upload / File URL */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Document File (Upload PDF/Doc or Enter URL) *
+                    </label>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={dlFormFileUrl}
+                        onChange={(e) => setDlFormFileUrl(e.target.value)}
+                        placeholder="https://... or upload below"
+                        style={{
+                          flex: 1,
+                          background: 'rgba(0, 0, 0, 0.4)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: '8px',
+                          padding: '10px 14px',
+                          color: '#ffffff',
+                          fontSize: '0.88rem',
+                          outline: 'none'
+                        }}
+                      />
+                      <label style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                        padding: '10px 18px',
+                        borderRadius: '8px',
+                        color: '#ffffff',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+                        opacity: isUploadingDlFile ? 0.6 : 1
+                      }}>
+                        <Upload size={15} />
+                        <span>{isUploadingDlFile ? 'Uploading...' : 'Upload File'}</span>
+                        <input type="file" accept=".pdf,.doc,.docx,.zip,.dwg,.png,.jpg,.jpeg" onChange={handleUploadDownloadFile} hidden />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* File Size & Format */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                        File Format (e.g. PDF, ZIP, DWG)
+                      </label>
+                      <input
+                        type="text"
+                        value={dlFormFileType}
+                        onChange={(e) => setDlFormFileType(e.target.value)}
+                        placeholder="e.g. PDF"
+                        style={{
+                          width: '100%',
+                          background: 'rgba(0, 0, 0, 0.4)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: '8px',
+                          padding: '10px 14px',
+                          color: '#ffffff',
+                          fontSize: '0.88rem',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                        File Size (e.g. 4.8 MB)
+                      </label>
+                      <input
+                        type="text"
+                        value={dlFormFileSize}
+                        onChange={(e) => setDlFormFileSize(e.target.value)}
+                        placeholder="e.g. 4.8 MB"
+                        style={{
+                          width: '100%',
+                          background: 'rgba(0, 0, 0, 0.4)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: '8px',
+                          padding: '10px 14px',
+                          color: '#ffffff',
+                          fontSize: '0.88rem',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Document Description & Highlights
+                    </label>
+                    <textarea
+                      value={dlFormDesc}
+                      onChange={(e) => setDlFormDesc(e.target.value)}
+                      rows={3}
+                      placeholder="e.g. Comprehensive 32-page brochure containing unit layouts, specifications, amenities, and developer credentials."
+                      style={{
+                        width: '100%',
+                        background: 'rgba(0, 0, 0, 0.4)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        color: '#ffffff',
+                        fontSize: '0.85rem',
+                        outline: 'none',
+                        resize: 'vertical'
+                      }}
+                    />
+                  </div>
+
+                  {/* Form Actions */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingDownload(false)}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        color: '#cbd5e1',
+                        padding: '8px 18px',
+                        borderRadius: '8px',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveDownloadItem}
+                      disabled={isSavingDownload || isUploadingDlFile}
+                      style={{
+                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                        border: 'none',
+                        color: '#ffffff',
+                        padding: '8px 24px',
+                        borderRadius: '8px',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+                        opacity: isSavingDownload || isUploadingDlFile ? 0.7 : 1
+                      }}
+                    >
+                      {isSavingDownload ? 'Saving...' : (editingDownloadItem ? 'Update Document' : 'Save Document')}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Documents Cards Grid */
+                (() => {
+                  const filtered = downloadsList.filter(item => {
+                    if (dlCategoryFilter === 'all') return true;
+                    return item.category === dlCategoryFilter;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div style={{ textAlign: 'center', padding: '3.5rem 1rem' }}>
+                        <FolderDown size={54} style={{ color: '#4f46e5', margin: '0 auto 16px auto' }} />
+                        <h4 style={{ color: '#ffffff', fontSize: '1.1rem', margin: '0 0 6px 0' }}>No Documents or Brochures Added Yet</h4>
+                        <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '0 0 20px 0', maxWidth: '380px', marginLeft: 'auto', marginRight: 'auto' }}>
+                          Upload project e-brochures, master plan maps, unit floor plans, and technical specification sheets for clients to download.
+                        </p>
+                        {isAdmin && (
+                          <button
+                            onClick={handleOpenAddDownload}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                              padding: '10px 22px',
+                              borderRadius: '12px',
+                              color: '#ffffff',
+                              fontSize: '0.85rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              border: 'none',
+                              boxShadow: '0 6px 20px rgba(99,102,241,0.4)'
+                            }}
+                          >
+                            <Plus size={16} />
+                            <span>Upload First Document</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="smart-downloads-grid">
+                      {filtered.map(item => {
+                        let IconComp = FileText;
+                        let catClass = 'smart-doc-brochure';
+                        let catLabel = 'Project Brochure';
+
+                        if (item.category === 'masterplan') {
+                          IconComp = Map;
+                          catClass = 'smart-doc-plan';
+                          catLabel = 'Master Plan PDF';
+                        } else if (item.category === 'floorplan') {
+                          IconComp = Building2;
+                          catClass = 'smart-doc-plan';
+                          catLabel = 'Floor Plan Layout';
+                        } else if (item.category === 'legal') {
+                          IconComp = File;
+                          catClass = 'smart-doc-legal';
+                          catLabel = 'Legal & Approval';
+                        } else if (item.category === 'report') {
+                          IconComp = FileDown;
+                          catClass = 'smart-doc-pdf';
+                          catLabel = 'Project Report';
+                        }
+
+                        const resolvedUrl = toCloudFrontUrl(item.fileUrl);
+
+                        return (
+                          <div key={item.id} className="smart-download-card">
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div className={`smart-doc-icon-box ${catClass}`}>
+                                  <IconComp size={20} />
+                                </div>
+                                <div>
+                                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.01em' }}>
+                                    {item.title}
+                                  </h4>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
+                                    <span style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                      {catLabel}
+                                    </span>
+                                    {item.fileSize && (
+                                      <span style={{
+                                        fontSize: '0.66rem',
+                                        fontWeight: 700,
+                                        background: 'rgba(255, 255, 255, 0.08)',
+                                        padding: '1px 6px',
+                                        borderRadius: '4px',
+                                        color: '#cbd5e1'
+                                      }}>
+                                        {item.fileType || 'PDF'} • {item.fileSize}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Admin Actions */}
+                              {isAdmin && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <button
+                                    onClick={() => handleOpenEditDownload(item)}
+                                    style={{
+                                      background: 'rgba(99, 102, 241, 0.18)',
+                                      border: '1px solid rgba(99, 102, 241, 0.4)',
+                                      borderRadius: '8px',
+                                      color: '#818cf8',
+                                      padding: '5px 10px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    title="Edit document details"
+                                  >
+                                    <Edit3 size={12} />
+                                    <span>Edit</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteDownloadItem(item.id)}
+                                    style={{
+                                      background: 'rgba(239, 68, 68, 0.15)',
+                                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                                      borderRadius: '8px',
+                                      color: '#ef4444',
+                                      width: '28px',
+                                      height: '28px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    title="Delete document"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Description */}
+                            {item.description && (
+                              <p style={{ margin: 0, fontSize: '0.78rem', color: '#94a3b8', lineHeight: 1.5 }}>
+                                {item.description}
+                              </p>
+                            )}
+
+                            {/* Download Action Button */}
+                            <div>
+                              <a
+                                href={resolvedUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download
+                                className="smart-doc-btn"
+                              >
+                                <Download size={14} />
+                                <span>Download / View Document</span>
+                                <ExternalLink size={12} style={{ opacity: 0.7 }} />
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. LIGHTBOX FULLSCREEN PHOTO VIEWER */}
       {lightboxIndex !== null && galleryPhotos[lightboxIndex] && (
         <div className="smart-lightbox" onClick={() => setLightboxIndex(null)}>
           <button
