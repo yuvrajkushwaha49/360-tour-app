@@ -24,6 +24,7 @@ import { exportProjectToZip } from '../utils/exportZip';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
 import { loadLargeDraft, deleteLargeDraft } from '../utils/dbStorage';
 import EditUserModal from './EditUserModal';
+import { createShareUrl } from '../utils/shareSecurity';
 
 interface ProjectItem {
   id: string;
@@ -339,6 +340,10 @@ export default function ClientDashboard({
   };
 
   const deleteProject = async (id: string) => {
+    if (user.role !== 'admin') {
+      alert('Permission denied: Only administrators can delete projects.');
+      return;
+    }
     const proj = projects.find(p => p.id === id);
     const projName = proj ? proj.name : 'this 360 tour project';
     const confirmMsg = `⚠️ Are you sure you want to permanently delete "${projName}"?\n\nThis will permanently delete the project and purge all its 360 images.`;
@@ -381,9 +386,7 @@ export default function ClientDashboard({
   };
 
   const copyShareLink = (tourId: string) => {
-    const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
-    const expiresAt = Date.now() + 5 * 60 * 1000;
-    const url = `${base}/?tourId=${tourId}&exp=${expiresAt}`;
+    const url = createShareUrl(tourId, 5);
     navigator.clipboard.writeText(url);
     setCopiedId(tourId);
     setTimeout(() => setCopiedId(null), 2500);

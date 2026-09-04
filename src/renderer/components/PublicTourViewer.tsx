@@ -48,6 +48,7 @@ import Viewer360, { Viewer360Ref } from './Viewer360';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
 import { ImageAdjustments, DEFAULT_ADJUSTMENTS } from '../utils/imageAdjustmentEngine';
 import { uploadFileWithFallback } from '../utils/uploadWithFallback';
+import { createShareUrl, verifyShareParams } from '../utils/shareSecurity';
 
 export interface ConnectivityItem {
   id: string;
@@ -92,29 +93,20 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     }
   });
 
-  // Temporary 5-Minute Share Link Expiration State
-  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(() => {
+  // Temporary Share Link Expiration & Tamper-Proof Cryptographic Verification
+  const initialShareStatus = (() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const exp = urlParams.get('exp') || urlParams.get('expires');
-      if (exp) {
-        const diff = Math.floor((Number(exp) - Date.now()) / 1000);
-        return diff;
-      }
-    } catch (e) { }
-    return null;
-  });
+      const sig = urlParams.get('sig') || urlParams.get('signature');
+      return verifyShareParams(tourId, exp, sig);
+    } catch (e) {
+      return { isExpiring: false, isValid: true, isExpired: false, remainingSeconds: null };
+    }
+  })();
 
-  const [isLinkExpired, setIsLinkExpired] = useState<boolean>(() => {
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      const exp = urlParams.get('exp') || urlParams.get('expires');
-      if (exp) {
-        return Date.now() > Number(exp);
-      }
-    } catch (e) { }
-    return false;
-  });
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(initialShareStatus.remainingSeconds);
+  const [isLinkExpired, setIsLinkExpired] = useState<boolean>(initialShareStatus.isExpired);
 
   // Admin Manual Share Modal States
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
@@ -186,7 +178,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       return null;
     }
   })();
-  const isAdmin = currentUser?.role === 'admin' || Boolean(localStorage.getItem('crm_token')) || Boolean(localStorage.getItem('token'));
+  const isAdmin = currentUser?.role === 'admin';
 
   // Smart City Portal UI States
   const [activeNavTab, setActiveNavTab] = useState<string>('overview');
@@ -314,6 +306,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
   // Helper to persist location-specific updates to backend
   const saveUpdatedLocationData = async (locUpdates: Record<string, any>) => {
+    if (!isAdmin) {
+      console.warn('Unauthorized attempt to modify location data');
+      return;
+    }
     const locations = tourData?.locations || [];
     const targetLocId = activeLocationId || (locations[0] && locations[0].id);
     if (!targetLocId) return;
@@ -365,12 +361,26 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     setIsPrivate(false);
     try {
       const token = localStorage.getItem('crm_token');
-      const response = await fetch(`${API_BASE_URL}/api/tours/${tourId}`, {
+      const urlParams = new URLSearchParams(window.location.search);
+      const expParam = urlParams.get('exp') || urlParams.get('expires') || '';
+      const sigParam = urlParams.get('sig') || urlParams.get('signature') || '';
+      const queryParams = new URLSearchParams();
+      if (expParam) queryParams.set('exp', expParam);
+      if (sigParam) queryParams.set('sig', sigParam);
+      const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
+      const response = await fetch(`${API_BASE_URL}/api/tours/${tourId}${qs}`, {
         headers: {
           Authorization: token ? `Bearer ${token}` : ''
         }
       });
       const data = await response.json();
+
+      if (response.status === 410 || data.is_expired) {
+        setIsLinkExpired(true);
+        setError('This share link has expired or is invalid.');
+        return;
+      }
 
       if (response.status === 403 || data.is_private) {
         setIsPrivate(true);
@@ -429,6 +439,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleUploadMasterPlanImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) {
+      alert('Permission denied: Only administrators can upload master plan images.');
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -457,6 +471,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleSaveMasterPlan = async () => {
+    if (!isAdmin) {
+      alert('Permission denied: Only administrators can edit the master plan.');
+      return;
+    }
     setIsSavingMp(true);
     try {
       const updatedMasterPlan = {
@@ -475,6 +493,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleUploadGalleryPhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) {
+      alert('Permission denied: Only administrators can upload gallery photos.');
+      return;
+    }
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -511,6 +533,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleDeleteGalleryPhoto = async (indexToDelete: number) => {
+    if (!isAdmin) {
+      alert('Permission denied: Only administrators can delete gallery photos.');
+      return;
+    }
     if (!confirm('Are you sure you want to remove this photo from the gallery?')) return;
 
     const updatedGallery = galleryPhotos.filter((_, idx) => idx !== indexToDelete);
@@ -524,6 +550,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
   // Connectivity Handlers
   const handleOpenAddConnectivity = () => {
+    if (!isAdmin) return;
     setEditingConnItem(null);
     setConnFormTitle('');
     setConnFormCategory('road');
@@ -533,6 +560,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleOpenEditConnectivity = (item: ConnectivityItem) => {
+    if (!isAdmin) return;
     setEditingConnItem(item);
     setConnFormTitle(item.title);
     setConnFormCategory(item.category);
@@ -542,6 +570,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleSaveConnectivityItem = async () => {
+    if (!isAdmin) {
+      alert('Permission denied: Only administrators can manage connectivity items.');
+      return;
+    }
     if (!connFormTitle.trim()) {
       alert('Please enter a name/title for the connectivity point.');
       return;
@@ -588,6 +620,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleDeleteConnectivityItem = async (idToDelete: string) => {
+    if (!isAdmin) {
+      alert('Permission denied: Only administrators can delete connectivity items.');
+      return;
+    }
     if (!confirm('Are you sure you want to remove this connectivity item?')) return;
 
     const updatedList = connectivityList.filter(item => item.id !== idToDelete);
@@ -601,6 +637,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
   // Downloads Handlers
   const handleUploadDownloadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) {
+      alert('Permission denied: Only administrators can upload documents.');
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -634,6 +674,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleOpenAddDownload = () => {
+    if (!isAdmin) return;
     setEditingDownloadItem(null);
     setDlFormTitle('');
     setDlFormCategory('brochure');
@@ -645,6 +686,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleOpenEditDownload = (item: DownloadItem) => {
+    if (!isAdmin) return;
     setEditingDownloadItem(item);
     setDlFormTitle(item.title);
     setDlFormCategory(item.category);
@@ -656,6 +698,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleSaveDownloadItem = async () => {
+    if (!isAdmin) {
+      alert('Permission denied: Only administrators can save documents.');
+      return;
+    }
     if (!dlFormTitle.trim()) {
       alert('Please enter a title for the document.');
       return;
@@ -710,6 +756,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleDeleteDownloadItem = async (idToDelete: string) => {
+    if (!isAdmin) {
+      alert('Permission denied: Only administrators can delete documents.');
+      return;
+    }
     if (!confirm('Are you sure you want to remove this document?')) return;
 
     const updatedList = downloadsList.filter(item => item.id !== idToDelete);
@@ -738,6 +788,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleUploadHotspotTargetRoomThumbnail = async (targetRoomId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) return;
     const file = e.target.files?.[0];
     if (!file || !targetRoomId) return;
 
@@ -790,7 +841,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleSaveHotspotDetails = async () => {
-    if (!editingHotspot || !currentLocation) return;
+    if (!isAdmin || !editingHotspot || !currentLocation) return;
     setIsSavingHotspot(true);
     try {
       const updatedHotspots = (currentLocation.hotspots || []).map((h: any) =>
@@ -848,6 +899,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleDeleteHotspot = async (hotspotIdToDelete: string) => {
+    if (!isAdmin) return;
     if (!confirm('Are you sure you want to delete this hotspot?')) return;
     if (!currentLocation) return;
 
@@ -890,6 +942,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
   // Upload Custom Room / Location Thumbnail Handler
   const handleUploadLocationThumbnail = async (locId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -944,12 +997,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const getGeneratedShareUrl = () => {
-    const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
-    if (shareMinutes <= 0) {
-      return `${base}/?tourId=${tourId}`;
-    }
-    const expiresAt = Date.now() + shareMinutes * 60 * 1000;
-    return `${base}/?tourId=${tourId}&exp=${expiresAt}`;
+    return createShareUrl(tourId, shareMinutes);
   };
 
   const handleCopyShareModalLink = () => {
@@ -1678,7 +1726,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             const targetLoc = locations.find((l: any) => l.id === targetId);
             if (targetLoc) handleLocationChange(targetLoc.id);
           }}
-          onEditHotspot={handleOpenEditHotspot}
+          onEditHotspot={isAdmin ? handleOpenEditHotspot : undefined}
+          isAdmin={isAdmin}
           galleryPhotos={galleryPhotos}
         />
       </div>

@@ -617,7 +617,9 @@ const RoadArrowBanner = ({
   onDeleteHotspot,
   onAddAreaOutline,
   onNavigate,
-  galleryPhotos
+  galleryPhotos,
+  isAdmin = false,
+  readOnly = false
 }: {
   start: [number, number, number];
   end: [number, number, number];
@@ -633,6 +635,8 @@ const RoadArrowBanner = ({
   onAddAreaOutline: (hs: HotspotItem) => void;
   onNavigate: (targetId: string) => void;
   galleryPhotos?: string[];
+  isAdmin?: boolean;
+  readOnly?: boolean;
 }) => {
   const groupRef = React.useRef<THREE.Group>(null);
 
@@ -819,6 +823,7 @@ const RoadArrowBanner = ({
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              if (!isAdmin || readOnly) return;
               setActiveInfoId(null);
               setContextMenuId(contextMenuId === h.id ? null : h.id);
             }}
@@ -866,6 +871,7 @@ interface SceneGroupProps {
   areaType: 'building' | 'river' | 'road';
   isPreloading?: boolean;
   readOnly?: boolean;
+  isAdmin?: boolean;
   galleryPhotos?: string[];
 }
 
@@ -890,6 +896,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
   areaType,
   isPreloading = false,
   readOnly = false,
+  isAdmin = false,
   galleryPhotos = []
 }) => {
   const groupRef = useRef<THREE.Group>(null);
@@ -1095,6 +1102,8 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                       onDeleteHotspot={onDeleteHotspot}
                       onAddAreaOutline={onAddAreaOutline}
                       onNavigate={onNavigate}
+                      isAdmin={isAdmin}
+                      readOnly={readOnly}
                     />
                   );
                 }
@@ -1114,7 +1123,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                       onMouseLeave={() => { setActiveInfoId(null); }}
                     >
                       {/* Context Menu (Above Pin) */}
-                      {contextMenuId === h.id && (
+                      {isAdmin && !readOnly && contextMenuId === h.id && (
                         <div style={{
                           position: 'absolute',
                           bottom: 'calc(100% + 10px)',
@@ -1189,7 +1198,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                             style={{
                               background: 'none',
                               border: 'none',
-                              color: 'var(--accent-error)',
+                              color: '#ef4444',
                               padding: '6px 12px',
                               fontSize: '0.75rem',
                               textAlign: 'left',
@@ -1202,7 +1211,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                             onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
                             onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                           >
-                            ✕ Delete
+                            🗑 Delete
                           </button>
                         </div>
                       )}
@@ -1561,6 +1570,7 @@ interface Viewer360Props {
   onAddAreaOutline?: (hs: HotspotItem) => void;
   areaType?: 'building' | 'river' | 'road';
   readOnly?: boolean;
+  isAdmin?: boolean;
   autoRotate?: boolean;
   onOpenAdjustments?: () => void;
   onImageNotFound?: () => void;
@@ -1617,6 +1627,7 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
   onAddAreaOutline = () => { },
   areaType = 'building',
   readOnly = false,
+  isAdmin = false,
   autoRotate: propAutoRotate = false,
   onOpenAdjustments = () => { },
   onImageNotFound = () => { },
@@ -2121,6 +2132,7 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
           areaType={areaType}
           isPreloading={isPreloading}
           readOnly={readOnly}
+          isAdmin={isAdmin}
           galleryPhotos={galleryPhotos}
         />
         <OrbitControls

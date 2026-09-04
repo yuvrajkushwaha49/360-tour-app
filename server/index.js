@@ -920,6 +920,7 @@ function renderPrivateTourHtml(tourName) {
 // Get a public/private tour configuration for 360 viewer rendering
 app.get('/api/tours/:id', (req, res) => {
   const { id } = req.params;
+  const { exp, sig } = req.query;
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -935,6 +936,32 @@ app.get('/api/tours/:id', (req, res) => {
     });
   }
 
+  // Cryptographic share signature verification
+  const SHARE_SECURITY_SALT = 'kalaakchar_virtual_360_secure_salt_2026';
+  let hasValidShareSignature = false;
+  let isShareLinkExpiredOrTampered = false;
+
+  if (exp) {
+    const crypto = require('crypto');
+    const cleanExp = String(exp).trim();
+    const cleanSig = String(sig || '').trim().toLowerCase();
+    const expectedSig = crypto.createHash('sha256')
+      .update(`${id}:${cleanExp}:${SHARE_SECURITY_SALT}`)
+      .digest('hex')
+      .slice(0, 16);
+
+    if (cleanSig && cleanSig === expectedSig.toLowerCase()) {
+      const expNum = Number(cleanExp);
+      if (!isNaN(expNum) && Date.now() <= expNum) {
+        hasValidShareSignature = true;
+      } else {
+        isShareLinkExpiredOrTampered = true;
+      }
+    } else {
+      isShareLinkExpiredOrTampered = true;
+    }
+  }
+
   db.get(`SELECT projects.id, projects.user_id, projects.name, projects.is_public, projects.data, users.name as client_name, users.logo_url as client_logo FROM projects LEFT JOIN users ON projects.user_id = users.id WHERE projects.id = ?`, [id], (err, row) => {
     if (err) {
       return res.status(500).json({ error: err.message });
@@ -942,8 +969,14 @@ app.get('/api/tours/:id', (req, res) => {
     if (!row) {
       return res.status(404).json({ error: 'Tour not found.' });
     }
+
+    // If accessed via an expired or tampered share link, reject immediately unless user is an authenticated admin
+    if (isShareLinkExpiredOrTampered && requestUserRole !== 'admin') {
+      return res.status(410).json({ error: 'This share link has expired or is invalid.', is_expired: true });
+    }
+
     if (row.is_public === 0) {
-      const isAuthorized = requestUserRole === 'admin' || (requestUserId && requestUserId === row.user_id);
+      const isAuthorized = requestUserRole === 'admin' || (requestUserId && requestUserId === row.user_id) || hasValidShareSignature;
       if (!isAuthorized) {
         const wantsHtml = req.headers.accept && req.headers.accept.includes('text/html');
         if (wantsHtml) {

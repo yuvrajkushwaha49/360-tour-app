@@ -273,6 +273,76 @@
   pointer-events: none;
 }
 
+.smart-close-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+
+  width: 38px;
+  height: 38px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+
+  color: #ffffff;
+  cursor: pointer;
+
+  box-shadow:
+    0 8px 25px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+
+  transition:
+    transform 0.25s ease,
+    background 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+/* Icon */
+.smart-close-btn svg {
+  width: 18px;
+  height: 18px;
+
+  transition:
+    transform 0.3s ease,
+    stroke-width 0.2s ease;
+}
+
+/* Hover */
+.smart-close-btn:hover {
+  background: rgba(255, 70, 70, 0.18);
+  border-color: rgba(255, 100, 100, 0.45);
+
+  box-shadow:
+    0 10px 30px rgba(255, 60, 60, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+
+  transform: scale(1.08);
+}
+
+.smart-close-btn:hover svg {
+  transform: rotate(90deg);
+}
+
+/* Click */
+.smart-close-btn:active {
+  transform: scale(0.92);
+}
+
+/* Keyboard accessibility */
+.smart-close-btn:focus-visible {
+  outline: 2px solid #7dd3fc;
+  outline-offset: 3px;
+}
+
 @media (max-width: 768px) {
   .smart-portal-right-sidebar {
     width: calc(100% - 2rem);
