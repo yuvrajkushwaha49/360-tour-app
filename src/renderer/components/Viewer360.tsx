@@ -873,6 +873,7 @@ interface SceneGroupProps {
   readOnly?: boolean;
   isAdmin?: boolean;
   galleryPhotos?: string[];
+  locations?: any[];
 }
 
 const SceneGroup: React.FC<SceneGroupProps> = ({
@@ -897,7 +898,8 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
   isPreloading = false,
   readOnly = false,
   isAdmin = false,
-  galleryPhotos = []
+  galleryPhotos = [],
+  locations = []
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const [activeInfoId, setActiveInfoId] = useState<string | null>(null);
@@ -1243,10 +1245,13 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                             gap: '8px'
                           }}
                         >
-                          {/* 5 Photos Sliding Carousel (from Gallery) just on top of details */}
-                          {galleryPhotos && galleryPhotos.length > 0 && (
-                            <HotspotPhotoSlider photos={galleryPhotos} />
-                          )}
+                          {/* Photo Slider (Target room gallery or hotspot specific photos) */}
+                          {(() => {
+                            const hsPhotos = (h as any).gallery || (h as any).galleryPhotos || (h.targetLocationId ? locations?.find((l: any) => l.id === h.targetLocationId)?.gallery : null) || (galleryPhotos && galleryPhotos.length > 0 ? galleryPhotos : null);
+                            return hsPhotos && Array.isArray(hsPhotos) && hsPhotos.length > 0 ? (
+                              <HotspotPhotoSlider photos={hsPhotos} />
+                            ) : null;
+                          })()}
 
                           {/* Card Top Title Row */}
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
@@ -1575,6 +1580,7 @@ interface Viewer360Props {
   onOpenAdjustments?: () => void;
   onImageNotFound?: () => void;
   galleryPhotos?: string[];
+  locations?: any[];
 }
 
 export interface Viewer360Ref {
@@ -1631,7 +1637,8 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
   autoRotate: propAutoRotate = false,
   onOpenAdjustments = () => { },
   onImageNotFound = () => { },
-  galleryPhotos = []
+  galleryPhotos = [],
+  locations = []
 }, ref) => {
   const [autoRotate, setAutoRotate] = useState(propAutoRotate);
 
@@ -2134,6 +2141,7 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
           readOnly={readOnly}
           isAdmin={isAdmin}
           galleryPhotos={galleryPhotos}
+          locations={locations}
         />
         <OrbitControls
           ref={controlsRef}

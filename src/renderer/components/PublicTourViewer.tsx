@@ -125,6 +125,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [galleryPhotos, setGalleryPhotos] = useState<string[]>([]);
   const [isUploadingGallery, setIsUploadingGallery] = useState<boolean>(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   // Connectivity Network States
   const [connectivityList, setConnectivityList] = useState<ConnectivityItem[]>([]);
@@ -280,7 +281,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     if (!currentLoc) return;
 
     // 1. Master Plan for active location
-    const locMp = currentLoc.masterPlan || (tourData?.masterPlan ? { ...tourData.masterPlan } : null);
+    const locMp = currentLoc.masterPlan;
     if (locMp) {
       setMpTitle(locMp.title || `${currentLoc.name} Master Plan`);
       setMpMessage(locMp.message || '');
@@ -292,15 +293,15 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     }
 
     // 2. Gallery for active location
-    const locGallery = currentLoc.gallery || currentLoc.galleryPhotos || currentLoc.images || (tourData?.gallery ? [...tourData.gallery] : []);
+    const locGallery = currentLoc.gallery || currentLoc.galleryPhotos || currentLoc.images || [];
     setGalleryPhotos(Array.isArray(locGallery) ? locGallery : []);
 
     // 3. Connectivity for active location
-    const locConn = currentLoc.connectivity || (tourData?.connectivity ? [...tourData.connectivity] : []);
+    const locConn = currentLoc.connectivity || [];
     setConnectivityList(Array.isArray(locConn) ? locConn : []);
 
     // 4. Downloads for active location
-    const locDl = currentLoc.downloads || (tourData?.downloads ? [...tourData.downloads] : []);
+    const locDl = currentLoc.downloads || [];
     setDownloadsList(Array.isArray(locDl) ? locDl : []);
   }, [activeLocationId, tourData]);
 
@@ -397,38 +398,31 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       const foundLogo = data.clientLogo || data.client_logo || data.tourData?.client_logo || data.tourData?.clientLogo || '';
       setClientLogo(foundLogo);
 
-      // Initialize Master Plan
-      if (data.tourData?.masterPlan) {
-        setMpTitle(data.tourData.masterPlan.title || '');
-        setMpMessage(data.tourData.masterPlan.message || '');
-        setMpImage(data.tourData.masterPlan.imageUrl || '');
-      }
-
-      // Initialize Gallery
-      if (data.tourData?.gallery && Array.isArray(data.tourData.gallery)) {
-        setGalleryPhotos(data.tourData.gallery);
-      }
-
-      // Initialize Connectivity
-      if (data.tourData?.connectivity && Array.isArray(data.tourData.connectivity)) {
-        setConnectivityList(data.tourData.connectivity);
-      }
-
-      // Initialize Downloads
-      if (data.tourData?.downloads && Array.isArray(data.tourData.downloads)) {
-        setDownloadsList(data.tourData.downloads);
-      }
-
       const locations = data.tourData?.locations || [];
       if (locations.length > 0) {
         const savedLocId = localStorage.getItem(`active_public_loc_${tourId}`);
         const isValidSavedLoc = savedLocId && locations.some((l: any) => l.id === savedLocId);
-        if (isValidSavedLoc) {
-          setActiveLocationId(savedLocId);
-        } else {
-          const firstLocId = locations[0].id;
-          setActiveLocationId(firstLocId);
-          localStorage.setItem(`active_public_loc_${tourId}`, firstLocId);
+        const targetId = isValidSavedLoc ? savedLocId : locations[0].id;
+        setActiveLocationId(targetId);
+        localStorage.setItem(`active_public_loc_${tourId}`, targetId);
+
+        const currentLoc = locations.find((l: any) => l.id === targetId) || locations[0];
+        if (currentLoc) {
+          if (currentLoc.masterPlan) {
+            setMpTitle(currentLoc.masterPlan.title || `${currentLoc.name} Master Plan`);
+            setMpMessage(currentLoc.masterPlan.message || '');
+            setMpImage(currentLoc.masterPlan.imageUrl || '');
+          } else {
+            setMpTitle(`${currentLoc.name} Master Plan`);
+            setMpMessage('');
+            setMpImage('');
+          }
+          const locGallery = currentLoc.gallery || currentLoc.galleryPhotos || currentLoc.images || [];
+          setGalleryPhotos(Array.isArray(locGallery) ? locGallery : []);
+          const locConn = currentLoc.connectivity || [];
+          setConnectivityList(Array.isArray(locConn) ? locConn : []);
+          const locDl = currentLoc.downloads || [];
+          setDownloadsList(Array.isArray(locDl) ? locDl : []);
         }
       }
     } catch (err: any) {
@@ -1729,6 +1723,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           onEditHotspot={isAdmin ? handleOpenEditHotspot : undefined}
           isAdmin={isAdmin}
           galleryPhotos={galleryPhotos}
+          locations={locations}
         />
       </div>
 
@@ -2103,14 +2098,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                         src={toCloudFrontUrl(mpImage)}
                         alt="Master Plan Blueprint"
                         className="smart-masterplan-img"
-                        onClick={() => {
-                          const idx = galleryPhotos.indexOf(mpImage);
-                          if (idx !== -1) setLightboxIndex(idx);
-                          else {
-                            setGalleryPhotos([mpImage, ...galleryPhotos]);
-                            setLightboxIndex(0);
-                          }
-                        }}
+                        onClick={() => setPreviewImageUrl(mpImage)}
                         title="Click to Enlarge"
                       />
                     ) : (
@@ -3790,6 +3778,40 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             }}>
               Photo {lightboxIndex + 1} of {galleryPhotos.length}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. SINGLE IMAGE PREVIEW FULLSCREEN MODAL (e.g. Master Plan Blueprint) */}
+      {previewImageUrl && (
+        <div className="smart-lightbox" onClick={() => setPreviewImageUrl(null)}>
+          <button
+            onClick={() => setPreviewImageUrl(null)}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              background: 'rgba(255, 255, 255, 0.15)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              zIndex: 100001
+            }}
+          >
+            <X size={20} />
+          </button>
+          <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+            <img
+              src={toCloudFrontUrl(previewImageUrl)}
+              alt="Preview Blueprint"
+              style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '12px' }}
+            />
           </div>
         </div>
       )}
