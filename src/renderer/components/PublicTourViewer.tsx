@@ -1523,49 +1523,52 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
           marginBottom: '12px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))',
-              border: '1px solid rgba(99, 102, 241, 0.45)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#a5b4fc'
-            }}>
-              <Compass size={15} />
-            </div>
-            <div>
-              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.04em' }}>
-                ALL LOCATIONS
+          <div className="smart-cta-card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))',
+                border: '1px solid rgba(99, 102, 241, 0.45)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#a5b4fc'
+              }}>
+                <Compass size={15} />
               </div>
-              <div style={{ fontSize: '0.64rem', color: '#94a3b8' }}>
-                {sortedLocations.length} Interactive Spaces
+              <div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.04em' }}>
+                  ALL LOCATIONS
+                </div>
+
+                <div style={{ fontSize: '0.64rem', color: '#94a3b8' }}>
+                  {sortedLocations.length} Interactive Spaces
+                </div>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setRightSidebarOpen(false)}
+              style={{
+                width: '26px',
+                height: '26px',
+                borderRadius: '8px',
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#94a3b8',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+              title="Close List"
+            >
+              <X size={14} />
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setRightSidebarOpen(false)}
-            style={{
-              width: '26px',
-              height: '26px',
-              borderRadius: '8px',
-              background: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              color: '#94a3b8',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer'
-            }}
-            title="Close List"
-          >
-            <X size={14} />
-          </button>
         </div>
 
         {/* Locations List Items */}
