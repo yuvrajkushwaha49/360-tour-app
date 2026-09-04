@@ -1481,7 +1481,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <div className="smart-menu-icon"><Map size={15} /></div>
             <div>
               <div className="smart-menu-label">MASTER PLAN</div>
-              <div className="smart-menu-sub">View city planning</div>
+              <div className="smart-menu-sub">{currentLocation?.name || 'Space'} planning</div>
             </div>
           </div>
 
@@ -1489,7 +1489,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <div className="smart-menu-icon"><Building2 size={15} /></div>
             <div>
               <div className="smart-menu-label">INFRASTRUCTURE</div>
-              <div className="smart-menu-sub">World class infrastructure</div>
+              <div className="smart-menu-sub">{currentLocation?.name || 'Space'} facilities</div>
             </div>
           </div>
 
@@ -1497,15 +1497,15 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <div className="smart-menu-icon"><Network size={15} /></div>
             <div>
               <div className="smart-menu-label">CONNECTIVITY</div>
-              <div className="smart-menu-sub">Road • Rail • Air • Sea</div>
+              <div className="smart-menu-sub">{currentLocation?.name || 'Space'} transit & routes</div>
             </div>
           </div>
 
           <div className="smart-menu-item" onClick={() => setActiveNavTab('why')}>
             <div className="smart-menu-icon"><Star size={15} /></div>
             <div>
-              <div className="smart-menu-label">WHY {displayName.toUpperCase()}?</div>
-              <div className="smart-menu-sub">The future is here</div>
+              <div className="smart-menu-label">WHY {currentLocation?.name?.toUpperCase() || displayName.toUpperCase()}?</div>
+              <div className="smart-menu-sub">Key features & insights</div>
             </div>
           </div>
 
@@ -1513,7 +1513,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <div className="smart-menu-icon"><ImageIcon size={15} /></div>
             <div>
               <div className="smart-menu-label">GALLERY</div>
-              <div className="smart-menu-sub">Photos & videos</div>
+              <div className="smart-menu-sub">{currentLocation?.name || 'Space'} photos ({galleryPhotos.length})</div>
             </div>
           </div>
 
@@ -1521,7 +1521,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <div className="smart-menu-icon"><FolderDown size={15} /></div>
             <div>
               <div className="smart-menu-label">DOWNLOADS</div>
-              <div className="smart-menu-sub">Brochures & documents</div>
+              <div className="smart-menu-sub">{currentLocation?.name || 'Space'} docs ({downloadsList.length})</div>
             </div>
           </div>
         </div>
