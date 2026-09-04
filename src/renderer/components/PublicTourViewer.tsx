@@ -1593,21 +1593,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <button
               type="button"
               onClick={() => setRightSidebarOpen(false)}
-              style={{
-                width: '26px',
-                height: '26px',
-                borderRadius: '8px',
-                background: 'rgba(255, 255, 255, 0.06)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                color: '#94a3b8',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer'
-              }}
+              className="smart-close-btn"
               title="Close List"
             >
-              <X size={14} />
+              <X size={18} />
             </button>
           </div>
 
@@ -1943,22 +1932,12 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                 )}
 
                 <button
+                  type="button"
                   onClick={() => setActiveNavTab('overview')}
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: '#ffffff',
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer'
-                  }}
+                  className="smart-close-btn"
                   title="Close Master Plan"
                 >
-                  <X size={16} />
+                  <X size={18} />
                 </button>
               </div>
             </div>
@@ -2227,22 +2206,12 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                 )}
 
                 <button
+                  type="button"
                   onClick={() => setActiveNavTab('overview')}
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: '#ffffff',
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer'
-                  }}
+                  className="smart-close-btn"
                   title="Close Gallery"
                 >
-                  <X size={16} />
+                  <X size={18} />
                 </button>
               </div>
             </div>
@@ -3581,21 +3550,12 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <button
+                  type="button"
                   onClick={() => setActiveNavTab('overview')}
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    borderRadius: '50%',
-                    width: '32px',
-                    height: '32px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#94a3b8',
-                    cursor: 'pointer'
-                  }}
+                  className="smart-close-btn"
+                  title="Close"
                 >
-                  <X size={16} />
+                  <X size={18} />
                 </button>
               </div>
             </div>

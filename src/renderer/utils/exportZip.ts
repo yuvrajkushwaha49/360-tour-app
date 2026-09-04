@@ -359,6 +359,47 @@ export async function exportProjectToZip(
     }
     .transition-overlay.active { opacity: 1; }
 
+    /* Smart Close Button */
+    .smart-close-btn {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      color: #ffffff;
+      cursor: pointer;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      transition: transform 0.25s ease, background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+    .smart-close-btn svg {
+      width: 18px;
+      height: 18px;
+      transition: transform 0.3s ease, stroke-width 0.2s ease;
+    }
+    .smart-close-btn:hover {
+      background: rgba(255, 70, 70, 0.18);
+      border-color: rgba(255, 100, 100, 0.45);
+      box-shadow: 0 10px 30px rgba(255, 60, 60, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      transform: scale(1.08);
+    }
+    .smart-close-btn:hover svg {
+      transform: rotate(90deg);
+    }
+    .smart-close-btn:active {
+      transform: scale(0.92);
+    }
+    .smart-close-btn:focus-visible {
+      outline: 2px solid #7dd3fc;
+      outline-offset: 3px;
+    }
+
     @keyframes popFade {
       from { opacity: 0; transform: translateX(-50%) translateY(6px); }
       to { opacity: 1; transform: translateX(-50%) translateY(0); }
