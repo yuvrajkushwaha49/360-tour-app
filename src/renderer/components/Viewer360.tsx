@@ -703,7 +703,7 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
     maxWidth: '85vw',
     color: '#ffffff',
     boxShadow: `0 25px 60px rgba(0,0,0,0.9), 0 0 25px ${h.beaconColor ? `${h.beaconColor}44` : 'rgba(99, 102, 241, 0.3)'}`,
-    zIndex: 99999,
+    zIndex: 999999,
     pointerEvents: 'auto',
     display: 'flex',
     flexDirection: 'column',
@@ -928,10 +928,11 @@ const RoadArrowBanner = ({
       </mesh>
 
       {/* 2. Floating Text & Details Card directly attached */}
-      <Html position={[0, 0, 0]} center zIndexRange={[10, 50]}>
+      <Html position={[0, 0, 0]} center zIndexRange={isOpen || contextMenuId === h.id ? [999999, 999999] : [10, 50]}>
         <div
           style={{
             position: 'relative',
+            zIndex: (isOpen || contextMenuId === h.id) ? 999999 : 1,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -1351,10 +1352,11 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                 }
 
                 return (
-                  <Html position={h.position} center zIndexRange={[10, 50]}>
+                  <Html position={h.position} center zIndexRange={isOpen || contextMenuId === h.id ? [999999, 999999] : [10, 50]}>
                     <div
                       style={{
                         position: 'relative',
+                        zIndex: (isOpen || contextMenuId === h.id) ? 999999 : 1,
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
