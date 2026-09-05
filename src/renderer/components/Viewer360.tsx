@@ -603,6 +603,248 @@ const RoadArrowHelper = ({ start, end, color }: { start: [number, number, number
   );
 };
 
+interface SmartHotspotDetailCardProps {
+  h: HotspotItem;
+  isOpen: boolean;
+  hasDetails: boolean;
+  galleryPhotos?: string[];
+  locations?: any[];
+  readOnly?: boolean;
+  isAdmin?: boolean;
+  onEditHotspot?: (hs: HotspotItem) => void;
+  onNavigate: (targetId: string, position?: [number, number, number]) => void;
+  setActiveInfoId: (id: string | null) => void;
+}
+
+const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
+  h,
+  isOpen,
+  hasDetails,
+  galleryPhotos,
+  locations,
+  readOnly = false,
+  isAdmin = false,
+  onEditHotspot,
+  onNavigate,
+  setActiveInfoId
+}) => {
+  const cardRef = React.useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = React.useState<{
+    isDownside: boolean;
+    align: 'center' | 'left' | 'right';
+  }>({ isDownside: false, align: 'center' });
+
+  React.useLayoutEffect(() => {
+    if (!isOpen) return;
+
+    const computePlacement = () => {
+      if (!cardRef.current) return;
+      const parentEl = cardRef.current.parentElement;
+      if (!parentEl) return;
+
+      const parentRect = parentEl.getBoundingClientRect();
+      const windowH = window.innerHeight;
+      const windowW = window.innerWidth;
+
+      // Estimated or actual card height
+      const cardH = cardRef.current.offsetHeight || 280;
+      const cardW = cardRef.current.offsetWidth || 290;
+
+      // Space above and below (safe margins for header ~70px and footer toolbar ~110px)
+      const topMargin = 70;
+      const bottomMargin = 110;
+      const spaceAbove = parentRect.top - topMargin;
+      const spaceBelow = windowH - parentRect.bottom - bottomMargin;
+
+      // If not enough space on top (spaceAbove < cardH or < 260px) and downside has more/sufficient space:
+      // Open downside!
+      let isDownside = false;
+      if (spaceAbove < Math.min(cardH + 20, 260) || (spaceAbove < 320 && spaceBelow > spaceAbove)) {
+        isDownside = true;
+      }
+
+      // Horizontal edge protection (prevent cut off by left or right screen boundaries)
+      let align: 'center' | 'left' | 'right' = 'center';
+      const halfW = cardW / 2;
+      const centerX = parentRect.left + parentRect.width / 2;
+      if (centerX - halfW < 20) {
+        align = 'left';
+      } else if (centerX + halfW > windowW - 20) {
+        align = 'right';
+      }
+
+      setPlacement({ isDownside, align });
+    };
+
+    computePlacement();
+    const animId = requestAnimationFrame(computePlacement);
+    return () => cancelAnimationFrame(animId);
+  }, [isOpen, h]);
+
+  if (!hasDetails || !isOpen) return null;
+
+  const positionStyle: React.CSSProperties = {
+    position: 'absolute',
+    ...(placement.isDownside
+      ? { top: 'calc(100% + 14px)', bottom: 'auto' }
+      : { bottom: 'calc(100% + 14px)', top: 'auto' }),
+    ...(placement.align === 'center'
+      ? { left: '50%', right: 'auto', transform: 'translateX(-50%)' }
+      : placement.align === 'left'
+      ? { left: '0', right: 'auto', transform: 'none' }
+      : { right: '0', left: 'auto', transform: 'none' }),
+    background: 'rgba(9, 13, 24, 0.96)',
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
+    border: `1px solid ${h.beaconColor ? `${h.beaconColor}99` : 'rgba(99, 102, 241, 0.5)'}`,
+    borderRadius: '14px',
+    padding: '12px 16px',
+    width: '290px',
+    maxWidth: '85vw',
+    color: '#ffffff',
+    boxShadow: `0 25px 60px rgba(0,0,0,0.9), 0 0 25px ${h.beaconColor ? `${h.beaconColor}44` : 'rgba(99, 102, 241, 0.3)'}`,
+    zIndex: 99999,
+    pointerEvents: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    transition: 'top 0.15s ease, bottom 0.15s ease'
+  };
+
+  const hsPhotos = (h as any).gallery || (h as any).galleryPhotos || (h.targetLocationId ? locations?.find((l: any) => l.id === h.targetLocationId)?.gallery : null) || (galleryPhotos && galleryPhotos.length > 0 ? galleryPhotos : null);
+
+  return (
+    <div ref={cardRef} style={positionStyle}>
+      {/* Photo Slider (Target room gallery or hotspot specific photos) */}
+      {hsPhotos && Array.isArray(hsPhotos) && hsPhotos.length > 0 && (
+        <HotspotPhotoSlider photos={hsPhotos} />
+      )}
+
+      {/* Card Top Title Row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div
+            style={{
+              width: '22px',
+              height: '22px',
+              borderRadius: '6px',
+              background: h.beaconColor ? `${h.beaconColor}33` : 'rgba(99, 102, 241, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: h.beaconColor || '#a5b4fc',
+              flexShrink: 0
+            }}
+          >
+            {renderHotspotIcon(h.icon, h.customIconUrl, 14)}
+          </div>
+          <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#ffffff' }}>{h.name}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {h.subtitle && (
+            <span
+              style={{
+                fontSize: '0.66rem',
+                fontWeight: 600,
+                color: h.beaconColor || '#a5b4fc',
+                background: h.beaconColor ? `${h.beaconColor}22` : 'rgba(99, 102, 241, 0.15)',
+                border: `1px solid ${h.beaconColor ? `${h.beaconColor}55` : 'rgba(99, 102, 241, 0.3)'}`,
+                padding: '1px 7px',
+                borderRadius: '10px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {h.subtitle}
+            </span>
+          )}
+          {!readOnly && onEditHotspot && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveInfoId(null);
+                onEditHotspot(h);
+              }}
+              style={{
+                background: 'rgba(99, 102, 241, 0.25)',
+                border: '1px solid rgba(99, 102, 241, 0.5)',
+                borderRadius: '6px',
+                color: '#c7d2fe',
+                padding: '2px 7px',
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px'
+              }}
+              title="Edit Hotspot Details"
+            >
+              <span>✏</span>
+              <span>Edit</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Area Tag if present */}
+      {h.area && (
+        <div style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span>📐 Area:</span>
+          <span style={{ color: '#fde68a' }}>{h.area}</span>
+        </div>
+      )}
+
+      {/* Description content */}
+      {h.description && (
+        <div
+          style={{
+            fontSize: '0.74rem',
+            color: '#cbd5e1',
+            lineHeight: '1.45',
+            wordBreak: 'break-word',
+            whiteSpace: 'normal',
+            maxHeight: '140px',
+            overflowY: 'auto'
+          }}
+        >
+          {h.description}
+        </div>
+      )}
+
+      {/* Target room action if linked */}
+      {h.targetLocationId && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onNavigate(h.targetLocationId!, h.position);
+          }}
+          style={{
+            marginTop: '4px',
+            width: '100%',
+            padding: '6px 10px',
+            borderRadius: '8px',
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            border: 'none',
+            color: '#ffffff',
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)'
+          }}
+        >
+          <span>Explore Space</span>
+          <span style={{ fontSize: '0.85rem' }}>➜</span>
+        </button>
+      )}
+    </div>
+  );
+};
+
 const RoadArrowBanner = ({
   start,
   end,
@@ -618,6 +860,7 @@ const RoadArrowBanner = ({
   onAddAreaOutline,
   onNavigate,
   galleryPhotos,
+  locations,
   isAdmin = false,
   readOnly = false
 }: {
@@ -633,8 +876,9 @@ const RoadArrowBanner = ({
   onEditHotspot: (hs: HotspotItem) => void;
   onDeleteHotspot: (id: string) => void;
   onAddAreaOutline: (hs: HotspotItem) => void;
-  onNavigate: (targetId: string) => void;
+  onNavigate: (targetId: string, position?: [number, number, number]) => void;
   galleryPhotos?: string[];
+  locations?: any[];
   isAdmin?: boolean;
   readOnly?: boolean;
 }) => {
@@ -667,21 +911,42 @@ const RoadArrowBanner = ({
     }
   }, [p2]);
 
+  const bannerColor = h.beaconColor || '#fbbf24';
+
   return (
     <group ref={groupRef} position={midpoint}>
       <mesh rotation={[0, Math.PI / 2, 0]}>
         <shapeGeometry args={[shape]} />
-        <meshBasicMaterial color="#174d80" side={THREE.DoubleSide} depthTest={false} />
+        <meshBasicMaterial
+          color={bannerColor}
+          side={THREE.DoubleSide}
+          transparent={true}
+          opacity={isOpen ? 0.95 : 0.75}
+          depthTest={false}
+          depthWrite={false}
+        />
       </mesh>
 
-      <Html position={[0, 0, 5]} center zIndexRange={[0, 50]}>
+      {/* 2. Floating Text & Details Card directly attached */}
+      <Html position={[0, 0, 0]} center zIndexRange={[10, 50]}>
         <div
-          style={{ position: 'relative', pointerEvents: 'auto' }}
-          onMouseEnter={() => { if (hasDetails && contextMenuId !== h.id) setActiveInfoId(h.id); }}
-          onMouseLeave={() => { if (hasDetails) setActiveInfoId(null); }}
+          style={{
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            transform: 'translateY(-50%)',
+            pointerEvents: 'auto'
+          }}
+          onMouseEnter={() => {
+            if (contextMenuId !== h.id) setActiveInfoId(h.id);
+          }}
+          onMouseLeave={() => {
+            setActiveInfoId(null);
+          }}
         >
-          {/* Context Menu (Above) */}
-          {contextMenuId === h.id && (
+          {/* Context Menu */}
+          {isAdmin && !readOnly && contextMenuId === h.id && (
             <div style={{
               position: 'absolute',
               bottom: 'calc(100% + 10px)',
@@ -774,46 +1039,19 @@ const RoadArrowBanner = ({
             </div>
           )}
 
-          {/* Details Card */}
-          {hasDetails && isOpen && (
-            <div style={{
-              position: 'absolute',
-              bottom: 'calc(100% + 10px)',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              background: 'rgba(15, 17, 26, 0.95)',
-              backdropFilter: 'blur(8px)',
-              border: '1px solid #1f2330',
-              borderRadius: '12px',
-              padding: '12px 14px',
-              width: '260px',
-              color: 'white',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
-              zIndex: 100,
-              pointerEvents: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px'
-            }}>
-              {/* 5 Photos Sliding Carousel (from Gallery) */}
-              {galleryPhotos && galleryPhotos.length > 0 && (
-                <HotspotPhotoSlider photos={galleryPhotos} />
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#a5b4fc' }}>{h.name}</span>
-              </div>
-              {h.area && (
-                <div style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 'bold', marginBottom: '4px' }}>
-                  📐 Area: {h.area}
-                </div>
-              )}
-              {h.description && (
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8', lineHeight: '1.4', wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                  {h.description}
-                </div>
-              )}
-            </div>
-          )}
+          {/* Smart Adaptive Details Card */}
+          <SmartHotspotDetailCard
+            h={h}
+            isOpen={isOpen}
+            hasDetails={hasDetails}
+            galleryPhotos={galleryPhotos}
+            locations={locations}
+            readOnly={readOnly}
+            isAdmin={isAdmin}
+            onEditHotspot={onEditHotspot}
+            onNavigate={onNavigate}
+            setActiveInfoId={setActiveInfoId}
+          />
 
           <div
             onClick={(e) => {
@@ -1003,7 +1241,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
         })
         .map(h => {
           const hasPolygon = h.polygonPoints && h.polygonPoints.length > 1;
-          const hasDetails = h.area || h.description;
+          const hasDetails = Boolean(h.area || h.description || h.subtitle || h.targetLocationId || (galleryPhotos && galleryPhotos.length > 0));
           const isOpen = activeInfoId === h.id;
 
           // Healing fallback for older saved project files
@@ -1104,6 +1342,8 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                       onDeleteHotspot={onDeleteHotspot}
                       onAddAreaOutline={onAddAreaOutline}
                       onNavigate={onNavigate}
+                      galleryPhotos={galleryPhotos}
+                      locations={locations}
                       isAdmin={isAdmin}
                       readOnly={readOnly}
                     />
@@ -1218,164 +1458,19 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                         </div>
                       )}
 
-                      {/* Details Card (Popup on Hover with Top z-index & Smart Positioning) */}
-                      {hasDetails && isOpen && (
-                        <div
-                          style={{
-                            position: 'absolute',
-                            ...(h.position[1] > 20
-                              ? { top: 'calc(100% + 14px)' }
-                              : { bottom: 'calc(100% + 14px)' }),
-                            left: '50%',
-                            transform: 'translateX(-50%)',
-                            background: 'rgba(9, 13, 24, 0.96)',
-                            backdropFilter: 'blur(24px)',
-                            WebkitBackdropFilter: 'blur(24px)',
-                            border: `1px solid ${h.beaconColor ? `${h.beaconColor}99` : 'rgba(99, 102, 241, 0.5)'}`,
-                            borderRadius: '14px',
-                            padding: '12px 16px',
-                            width: '290px',
-                            maxWidth: '85vw',
-                            color: '#ffffff',
-                            boxShadow: `0 25px 60px rgba(0,0,0,0.9), 0 0 25px ${h.beaconColor ? `${h.beaconColor}44` : 'rgba(99, 102, 241, 0.3)'}`,
-                            zIndex: 99999,
-                            pointerEvents: 'auto',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px'
-                          }}
-                        >
-                          {/* Photo Slider (Target room gallery or hotspot specific photos) */}
-                          {(() => {
-                            const hsPhotos = (h as any).gallery || (h as any).galleryPhotos || (h.targetLocationId ? locations?.find((l: any) => l.id === h.targetLocationId)?.gallery : null) || (galleryPhotos && galleryPhotos.length > 0 ? galleryPhotos : null);
-                            return hsPhotos && Array.isArray(hsPhotos) && hsPhotos.length > 0 ? (
-                              <HotspotPhotoSlider photos={hsPhotos} />
-                            ) : null;
-                          })()}
-
-                          {/* Card Top Title Row */}
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div
-                                style={{
-                                  width: '22px',
-                                  height: '22px',
-                                  borderRadius: '6px',
-                                  background: h.beaconColor ? `${h.beaconColor}33` : 'rgba(99, 102, 241, 0.2)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  color: h.beaconColor || '#a5b4fc',
-                                  flexShrink: 0
-                                }}
-                              >
-                                {renderHotspotIcon(h.icon, h.customIconUrl, 14)}
-                              </div>
-                              <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#ffffff' }}>{h.name}</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              {h.subtitle && (
-                                <span
-                                  style={{
-                                    fontSize: '0.66rem',
-                                    fontWeight: 600,
-                                    color: h.beaconColor || '#a5b4fc',
-                                    background: h.beaconColor ? `${h.beaconColor}22` : 'rgba(99, 102, 241, 0.15)',
-                                    border: `1px solid ${h.beaconColor ? `${h.beaconColor}55` : 'rgba(99, 102, 241, 0.3)'}`,
-                                    padding: '1px 7px',
-                                    borderRadius: '10px',
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                >
-                                  {h.subtitle}
-                                </span>
-                              )}
-                              {!readOnly && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveInfoId(null);
-                                    onEditHotspot(h);
-                                  }}
-                                  style={{
-                                    background: 'rgba(99, 102, 241, 0.25)',
-                                    border: '1px solid rgba(99, 102, 241, 0.5)',
-                                    borderRadius: '6px',
-                                    color: '#c7d2fe',
-                                    padding: '2px 7px',
-                                    fontSize: '0.68rem',
-                                    fontWeight: 700,
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '3px'
-                                  }}
-                                  title="Edit Hotspot Details"
-                                >
-                                  <span>✏</span>
-                                  <span>Edit</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Area Tag if present */}
-                          {h.area && (
-                            <div style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <span>📐 Area:</span>
-                              <span style={{ color: '#fde68a' }}>{h.area}</span>
-                            </div>
-                          )}
-
-                          {/* Description content */}
-                          {h.description && (
-                            <div
-                              style={{
-                                fontSize: '0.74rem',
-                                color: '#cbd5e1',
-                                lineHeight: '1.45',
-                                wordBreak: 'break-word',
-                                whiteSpace: 'normal',
-                                maxHeight: '140px',
-                                overflowY: 'auto'
-                              }}
-                            >
-                              {h.description}
-                            </div>
-                          )}
-
-                          {/* Target room action if linked */}
-                          {h.targetLocationId && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onNavigate(h.targetLocationId!, h.position);
-                              }}
-                              style={{
-                                marginTop: '4px',
-                                width: '100%',
-                                padding: '6px 10px',
-                                borderRadius: '8px',
-                                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                                border: 'none',
-                                color: '#ffffff',
-                                fontWeight: 600,
-                                fontSize: '0.72rem',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '6px',
-                                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)'
-                              }}
-                            >
-                              <span>Explore Location</span>
-                              <ChevronRight size={13} />
-                            </button>
-                          )}
-                        </div>
-                      )}
+                      {/* Smart Adaptive Details Card (Dynamic Flip to Downside if not enough space on top) */}
+                      <SmartHotspotDetailCard
+                        h={h}
+                        isOpen={isOpen}
+                        hasDetails={hasDetails}
+                        galleryPhotos={galleryPhotos}
+                        locations={locations}
+                        readOnly={readOnly}
+                        isAdmin={isAdmin}
+                        onEditHotspot={onEditHotspot}
+                        onNavigate={onNavigate}
+                        setActiveInfoId={setActiveInfoId}
+                      />
 
                       {/* 1. Smart City Futuristic Glassmorphic Hotspot Card (Reference Design) */}
                       <div
