@@ -667,27 +667,28 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
       const windowH = window.innerHeight;
       const windowW = window.innerWidth;
 
-      // Safe boundaries for header (~80px) and bottom carousel (~120px)
-      const topMargin = 85;
-      const bottomMargin = 120;
-      const spaceAbove = parentRect.top - topMargin;
-      const spaceBelow = windowH - parentRect.bottom - bottomMargin;
+      // Safe screen edges (allowing card to float directly over top header at highest z-index)
+      const screenPaddingTop = 10;
+      const screenPaddingBottom = 16;
+      const spaceAbove = parentRect.top - screenPaddingTop;
+      const spaceBelow = windowH - parentRect.bottom - screenPaddingBottom;
 
       const cardW = Math.min(300, windowW - 32);
       const centerX = parentRect.left + parentRect.width / 2;
       const left = Math.max(16, Math.min(windowW - cardW - 16, centerX - cardW / 2));
 
       // Decide downside vs upside:
-      // If spaceAbove is less than 380px, or spaceBelow has more room than spaceAbove: open downside!
-      const isDownside = spaceAbove < 380 || (spaceAbove < 420 && spaceBelow > spaceAbove);
+      // If spaceAbove is tight (< 280px) and spaceBelow has more room: open downside.
+      // Otherwise open upside (floating smoothly over top navigation header).
+      const isDownside = spaceAbove < 280 && spaceBelow > spaceAbove;
 
       if (isDownside) {
-        const top = Math.max(topMargin, parentRect.bottom + 12);
-        const maxHeight = Math.max(240, windowH - top - bottomMargin);
+        const top = Math.max(screenPaddingTop, parentRect.bottom + 12);
+        const maxHeight = Math.max(240, windowH - top - screenPaddingBottom);
         setCoords({ top, left, maxHeight });
       } else {
-        const bottom = Math.max(bottomMargin, windowH - parentRect.top + 12);
-        const maxHeight = Math.max(240, windowH - bottom - topMargin);
+        const bottom = Math.max(screenPaddingBottom, windowH - parentRect.top + 12);
+        const maxHeight = Math.max(240, windowH - bottom - screenPaddingTop);
         setCoords({ bottom, left, maxHeight });
       }
 
