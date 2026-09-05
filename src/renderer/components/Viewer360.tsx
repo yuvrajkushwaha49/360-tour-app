@@ -646,30 +646,25 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
       const windowH = window.innerHeight;
       const windowW = window.innerWidth;
 
-      // Estimated or actual card height
-      const cardH = cardRef.current.offsetHeight || 280;
+      // Estimated or actual card height (default to 380px since cards with photos are taller)
+      const cardH = cardRef.current.offsetHeight || 380;
       const cardW = cardRef.current.offsetWidth || 290;
 
-      // Space above and below (safe margins for header ~70px and footer toolbar ~110px)
-      const topMargin = 70;
-      const bottomMargin = 110;
+      // Safe top clearance for the floating top navbar (~95px)
+      const topMargin = 95;
       const spaceAbove = parentRect.top - topMargin;
-      const spaceBelow = windowH - parentRect.bottom - bottomMargin;
 
-      // If not enough space on top (spaceAbove < cardH or < 260px) and downside has more/sufficient space:
-      // Open downside!
-      let isDownside = false;
-      if (spaceAbove < Math.min(cardH + 20, 260) || (spaceAbove < 320 && spaceBelow > spaceAbove)) {
-        isDownside = true;
-      }
+      // If spaceAbove is less than card height + 30px buffer OR hotspot is in upper 55% of viewport:
+      // ALWAYS open DOWNSIDE to guarantee it never goes under or touches the top header!
+      const isDownside = spaceAbove < (cardH + 30) || (parentRect.top < windowH * 0.55);
 
-      // Horizontal edge protection (prevent cut off by left or right screen boundaries)
+      // Horizontal edge protection (prevent cut off by left sidebar or right boundaries)
       let align: 'center' | 'left' | 'right' = 'center';
       const halfW = cardW / 2;
       const centerX = parentRect.left + parentRect.width / 2;
-      if (centerX - halfW < 20) {
+      if (centerX - halfW < 30) {
         align = 'left';
-      } else if (centerX + halfW > windowW - 20) {
+      } else if (centerX + halfW > windowW - 30) {
         align = 'right';
       }
 
@@ -677,8 +672,14 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
     };
 
     computePlacement();
-    const animId = requestAnimationFrame(computePlacement);
-    return () => cancelAnimationFrame(animId);
+    const id1 = requestAnimationFrame(computePlacement);
+    const id2 = setTimeout(computePlacement, 50);
+    window.addEventListener('resize', computePlacement);
+    return () => {
+      cancelAnimationFrame(id1);
+      clearTimeout(id2);
+      window.removeEventListener('resize', computePlacement);
+    };
   }, [isOpen, h]);
 
   if (!hasDetails || !isOpen) return null;
@@ -701,8 +702,10 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
     padding: '12px 16px',
     width: '290px',
     maxWidth: '85vw',
+    maxHeight: 'calc(100vh - 220px)',
+    overflowY: 'auto',
     color: '#ffffff',
-    boxShadow: `0 25px 60px rgba(0,0,0,0.9), 0 0 25px ${h.beaconColor ? `${h.beaconColor}44` : 'rgba(99, 102, 241, 0.3)'}`,
+    boxShadow: `0 25px 60px rgba(0,0,0,0.95), 0 0 25px ${h.beaconColor ? `${h.beaconColor}44` : 'rgba(99, 102, 241, 0.3)'}`,
     zIndex: 999999,
     pointerEvents: 'auto',
     display: 'flex',
