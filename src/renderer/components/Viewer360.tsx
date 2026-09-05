@@ -1,7 +1,7 @@
 import { ImageAdjustments, DEFAULT_ADJUSTMENTS, injectAdjustmentsShader } from '../utils/imageAdjustmentEngine';
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Canvas, useFrame, useLoader } from '@react-three/fiber';
+import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import {
@@ -1710,14 +1710,96 @@ interface Viewer360Props {
 
 export interface Viewer360Ref {
   navigateToLocation: (targetId: string, customPos?: [number, number, number], targetLocData?: any) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  handleZoomIn: () => void;
+  handleZoomOut: () => void;
+  resetNorth: () => void;
 }
 
+const CanvasZoomHandler: React.FC = () => {
+  const { camera, gl } = useThree();
+
+  useEffect(() => {
+    const canvasEl = gl.domElement;
+    if (!canvasEl) return;
+
+    let initialDistance = 0;
+    let initialFov = 75;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+        const pCam = camera as THREE.PerspectiveCamera;
+        let zoomAmount = e.deltaY * 0.05;
+        if (e.ctrlKey) {
+          zoomAmount = e.deltaY * 0.1;
+        }
+        pCam.fov = Math.max(15, Math.min(105, pCam.fov + zoomAmount));
+        pCam.updateProjectionMatrix();
+      }
+    };
+
+    // Mobile Touch Pinch-to-Zoom
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        initialDistance = Math.hypot(dx, dy);
+        if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+          initialFov = (camera as THREE.PerspectiveCamera).fov;
+        }
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && initialDistance > 0) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const distance = Math.hypot(dx, dy);
+        const factor = initialDistance / (distance || 1);
+        if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+          const pCam = camera as THREE.PerspectiveCamera;
+          pCam.fov = Math.max(15, Math.min(105, initialFov * factor));
+          pCam.updateProjectionMatrix();
+        }
+      }
+    };
+
+    const handleTouchEnd = () => {
+      initialDistance = 0;
+    };
+
+    canvasEl.addEventListener('wheel', handleWheel, { passive: false });
+    canvasEl.addEventListener('touchstart', handleTouchStart, { passive: true });
+    canvasEl.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvasEl.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      canvasEl.removeEventListener('wheel', handleWheel);
+      canvasEl.removeEventListener('touchstart', handleTouchStart);
+      canvasEl.removeEventListener('touchmove', handleTouchMove);
+      canvasEl.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [gl, camera]);
+
+  return null;
+};
+
 const CameraZoomEffect: React.FC<{ isZooming: boolean; targetPos: [number, number, number] | null; controlsRef: any }> = ({ isZooming, targetPos, controlsRef }) => {
+  const wasZooming = useRef(false);
+  const restoreFrames = useRef(0);
+
   useFrame(({ camera }) => {
     if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
       const pCam = camera as THREE.PerspectiveCamera;
       if (isZooming) {
-        // Mild, gentle cinematic zoom (from 75 to 58 only instead of extreme zoom)
+        wasZooming.current = true;
+        restoreFrames.current = 0;
+        // Mild, gentle cinematic zoom towards hotspot
         pCam.fov = THREE.MathUtils.lerp(pCam.fov, 58, 0.035);
         pCam.updateProjectionMatrix();
 
@@ -1728,10 +1810,17 @@ const CameraZoomEffect: React.FC<{ isZooming: boolean; targetPos: [number, numbe
           controlsRef.current.target.lerp(desiredTarget, 0.045);
           controlsRef.current.update();
         }
-      } else if (pCam.fov < 74.5) {
-        // Smoothly restore natural default FOV (75) for the new location
-        pCam.fov = THREE.MathUtils.lerp(pCam.fov, 75, 0.06);
+      } else if (wasZooming.current) {
+        // Smoothly restore default FOV right after room navigation finishes
+        restoreFrames.current += 1;
+        pCam.fov = THREE.MathUtils.lerp(pCam.fov, 75, 0.08);
         pCam.updateProjectionMatrix();
+        if (Math.abs(pCam.fov - 75) < 0.5 || restoreFrames.current > 35) {
+          pCam.fov = 75;
+          pCam.updateProjectionMatrix();
+          wasZooming.current = false;
+          restoreFrames.current = 0;
+        }
       }
     }
   });
@@ -1877,9 +1966,44 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
     }
   }, [hotspots, onNavigate]);
 
+  const handleZoomIn = useCallback(() => {
+    if (controlsRef.current) {
+      const camera = controlsRef.current.object as THREE.PerspectiveCamera;
+      if (camera && 'fov' in camera) {
+        camera.fov = Math.max(15, camera.fov - 10);
+        camera.updateProjectionMatrix();
+      }
+    }
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    if (controlsRef.current) {
+      const camera = controlsRef.current.object as THREE.PerspectiveCamera;
+      if (camera && 'fov' in camera) {
+        camera.fov = Math.min(105, camera.fov + 10);
+        camera.updateProjectionMatrix();
+      }
+    }
+  }, []);
+
+  const resetNorth = useCallback(() => {
+    if (controlsRef.current) {
+      const camera = controlsRef.current.object;
+      camera.position.set(0, 0, -0.01);
+      controlsRef.current.target.set(0, 0, 0);
+      camera.lookAt(0, 0, 0);
+      controlsRef.current.update();
+    }
+  }, []);
+
   React.useImperativeHandle(ref, () => ({
-    navigateToLocation
-  }), [navigateToLocation]);
+    navigateToLocation,
+    zoomIn: handleZoomIn,
+    zoomOut: handleZoomOut,
+    handleZoomIn,
+    handleZoomOut,
+    resetNorth
+  }), [navigateToLocation, handleZoomIn, handleZoomOut, resetNorth]);
 
   const handleNavigateWithZoom = (targetId: string, hotspotPos?: [number, number, number]) => {
     navigateToLocation(targetId, hotspotPos);
@@ -1995,32 +2119,6 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
     return () => clearInterval(timer);
   }, [imageMissingError, onImageNotFound]);
 
-  React.useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-
-      if (controlsRef.current) {
-        const camera = controlsRef.current.object;
-        let zoomAmount = e.deltaY * 0.05;
-        if (e.ctrlKey) {
-          zoomAmount = e.deltaY * 0.1;
-        }
-
-        camera.fov = Math.max(20, Math.min(100, camera.fov + zoomAmount));
-        camera.updateProjectionMatrix();
-      }
-    };
-    const element = document.getElementById('viewer-canvas-container');
-    if (element) {
-      element.addEventListener('wheel', handleWheel, { passive: false });
-    }
-    return () => {
-      if (element) {
-        element.removeEventListener('wheel', handleWheel);
-      }
-    };
-  }, []);
-
   // Reset camera view towards FRONT face (+Z) whenever switching rooms/locations
   React.useEffect(() => {
     if (controlsRef.current) {
@@ -2031,22 +2129,6 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
       controlsRef.current.update();
     }
   }, [directions, stitchedPanoPath]);
-
-  const handleZoomIn = () => {
-    if (controlsRef.current) {
-      const camera = controlsRef.current.object;
-      camera.fov = Math.max(30, camera.fov - 10);
-      camera.updateProjectionMatrix();
-    }
-  };
-
-  const handleZoomOut = () => {
-    if (controlsRef.current) {
-      const camera = controlsRef.current.object;
-      camera.fov = Math.min(100, camera.fov + 10);
-      camera.updateProjectionMatrix();
-    }
-  };
 
   const toggleFullscreen = () => {
     const element = document.getElementById('interactive-workspace-wrapper');
@@ -2242,6 +2324,7 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
       )}
 
       <Canvas camera={{ position: [0, 0, -0.01], fov: 75 }}>
+        <CanvasZoomHandler />
         <CameraZoomEffect isZooming={isZooming} targetPos={zoomTargetPos} controlsRef={controlsRef} />
         <ambientLight intensity={1.5} />
         <SceneGroup

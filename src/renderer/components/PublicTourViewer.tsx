@@ -1049,10 +1049,10 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleZoom = (inOrOut: 'in' | 'out') => {
-    const canvasEl = document.getElementById('viewer-canvas-container');
-    if (canvasEl) {
-      const deltaY = inOrOut === 'in' ? -150 : 150;
-      canvasEl.dispatchEvent(new WheelEvent('wheel', { deltaY, bubbles: true }));
+    if (inOrOut === 'in') {
+      viewer360Ref.current?.zoomIn?.();
+    } else {
+      viewer360Ref.current?.zoomOut?.();
     }
   };
 
@@ -2139,11 +2139,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         <div
           className="smart-compass-dial"
           onClick={() => {
-            const canvasEl = document.getElementById('viewer-canvas-container');
-            if (canvasEl) {
-              const compassEl = canvasEl.querySelector('div[style*="rotate"]');
-              if (compassEl) (compassEl as HTMLElement).click();
-            }
+            viewer360Ref.current?.resetNorth?.();
           }}
           title="Orientation Compass (Click to reset North)"
         >
