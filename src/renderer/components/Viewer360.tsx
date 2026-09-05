@@ -1120,6 +1120,7 @@ interface SceneGroupProps {
   hotspots: HotspotItem[];
   stitchedPanoPath?: string;
   autoRotate: boolean;
+  autoRotateSpeed?: number;
   isPlacingHotspot: boolean;
   isDrawingArea: boolean;
   onAddHotspot: (position: [number, number, number]) => void;
@@ -1146,6 +1147,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
   hotspots,
   stitchedPanoPath,
   autoRotate,
+  autoRotateSpeed = 1.0,
   isPlacingHotspot,
   isDrawingArea,
   onAddHotspot,
@@ -1171,7 +1173,8 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
   useFrame(() => {
     if (groupRef.current) {
       if (autoRotate) {
-        groupRef.current.rotation.y += 0.001;
+        const speedMultiplier = typeof autoRotateSpeed === 'number' ? autoRotateSpeed : 1.0;
+        groupRef.current.rotation.y += 0.001 * speedMultiplier;
       }
       const deg = (groupRef.current.rotation.y * (180 / Math.PI)) % 360;
       const headingVal = Math.round(deg < 0 ? deg + 360 : deg);
@@ -1698,6 +1701,7 @@ interface Viewer360Props {
   readOnly?: boolean;
   isAdmin?: boolean;
   autoRotate?: boolean;
+  autoRotateSpeed?: number;
   onOpenAdjustments?: () => void;
   onImageNotFound?: () => void;
   galleryPhotos?: string[];
@@ -1756,6 +1760,7 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
   readOnly = false,
   isAdmin = false,
   autoRotate: propAutoRotate = false,
+  autoRotateSpeed = 1.0,
   onOpenAdjustments = () => { },
   onImageNotFound = () => { },
   galleryPhotos = [],
@@ -2246,6 +2251,7 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
           hotspots={hotspots}
           stitchedPanoPath={stitchedPanoPath}
           autoRotate={autoRotate}
+          autoRotateSpeed={autoRotateSpeed}
           isPlacingHotspot={isPlacingHotspot}
           isDrawingArea={isDrawingArea}
           onAddHotspot={onAddHotspot}

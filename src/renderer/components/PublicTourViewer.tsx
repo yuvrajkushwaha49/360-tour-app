@@ -21,6 +21,8 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCw,
+  RotateCcw,
+  Gauge,
   Minus,
   Upload,
   Trash2,
@@ -200,6 +202,15 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       return true;
     }
   });
+  const [autoRotateSpeed, setAutoRotateSpeed] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('tour_auto_rotate_speed');
+      return saved !== null ? parseFloat(saved) : 1.0;
+    } catch {
+      return 1.0;
+    }
+  });
+  const [speedMenuOpen, setSpeedMenuOpen] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const carouselScrollRef = useRef<HTMLDivElement>(null);
   const viewer360Ref = useRef<Viewer360Ref>(null);
@@ -212,6 +223,23 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       console.warn('Failed to save autoRotate state to localStorage', e);
     }
   }, [autoRotate]);
+
+  // Sync autoRotateSpeed to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('tour_auto_rotate_speed', String(autoRotateSpeed));
+    } catch (e) {
+      console.warn('Failed to save autoRotateSpeed to localStorage', e);
+    }
+  }, [autoRotateSpeed]);
+
+  // Close speed menu on outside click
+  useEffect(() => {
+    if (!speedMenuOpen) return;
+    const handleOutside = () => setSpeedMenuOpen(false);
+    window.addEventListener('click', handleOutside);
+    return () => window.removeEventListener('click', handleOutside);
+  }, [speedMenuOpen]);
 
   // Sync sidebar open/close state to localStorage
   useEffect(() => {
@@ -1704,6 +1732,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           stitchedPanoPath={currentLocation?.stitchedPanoPath || currentLocation?.imagePath}
           adjustments={dynamicAdjustments}
           autoRotate={autoRotate}
+          autoRotateSpeed={autoRotateSpeed}
           onImageNotFound={onBack}
           onNavigate={(targetId: string, position?: [number, number, number]) => {
             const targetLoc = locations.find((l: any) => l.id === targetId);
@@ -1798,12 +1827,12 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
                         gap: '4px',
                         zIndex: 15
                       }}>
-                        <Loader2 size={16} className="animate-spin text-indigo-400" />
-                        <span style={{ fontSize: '0.55rem', color: '#c7d2fe', fontWeight: 700 }}>Uploading</span>
+                        <Loader2 size={16} className="spin" color="#818cf8" />
+                        <span style={{ fontSize: '0.6rem', color: '#cbd5e1' }}>Uploading...</span>
                       </div>
                     )}
 
-                    <div className="smart-thumb-overlay">
+                    <div className="smart-thumb-info">
                       <span className="smart-thumb-num">{paddedNum}</span>
                       <span className="smart-thumb-name">{loc.name}</span>
                     </div>
@@ -1821,13 +1850,254 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         </div>
       )}
 
-      {/* Bottom Right Realistic 3D Compass & Controls (Zoom + Autoplay + Compass) */}
+      {/* Bottom Right Realistic 3D Compass & Controls (Zoom + Autoplay + Compass + Speed) */}
       <div className="smart-compass-widget">
+        {/* Speed Pill Toggle Button */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setSpeedMenuOpen(!speedMenuOpen);
+            }}
+            title="360° Auto-Rotate Speed & Direction Settings"
+            style={{
+              padding: '0 8px',
+              width: 'auto',
+              minWidth: '2.5rem',
+              height: '1.75rem',
+              borderRadius: '12px',
+              fontSize: '0.68rem',
+              fontWeight: 800,
+              gap: '4px',
+              background: speedMenuOpen ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(9, 13, 24, 0.85)',
+              border: speedMenuOpen ? '1.5px solid rgba(168, 85, 247, 0.8)' : '1px solid rgba(255, 255, 255, 0.15)',
+              color: '#ffffff',
+              boxShadow: speedMenuOpen ? '0 0 12px rgba(99, 102, 241, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              letterSpacing: '0.02em',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Gauge size={11} color={speedMenuOpen ? '#ffffff' : '#a5b4fc'} />
+            <span>{Math.abs(autoRotateSpeed)}x</span>
+          </button>
+
+          {/* Floating Speed Control Popover */}
+          {speedMenuOpen && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'absolute',
+                bottom: 'calc(100% + 12px)',
+                right: 0,
+                width: '250px',
+                background: 'rgba(9, 13, 24, 0.96)',
+                backdropFilter: 'blur(24px)',
+                WebkitBackdropFilter: 'blur(24px)',
+                border: '1px solid rgba(99, 102, 241, 0.45)',
+                borderRadius: '16px',
+                padding: '14px 16px',
+                color: '#ffffff',
+                boxShadow: '0 25px 60px rgba(0,0,0,0.9), 0 0 25px rgba(99, 102, 241, 0.3)',
+                zIndex: 99999,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                userSelect: 'none'
+              }}
+            >
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: 'rgba(99, 102, 241, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#818cf8' }}>
+                    <Gauge size={14} />
+                  </div>
+                  <span style={{ fontWeight: 600, fontSize: '0.84rem', color: '#ffffff' }}>Rotation Speed</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.74rem', fontWeight: 600, color: '#818cf8', background: 'rgba(99, 102, 241, 0.2)', padding: '2px 8px', borderRadius: '10px', border: '1px solid rgba(99, 102, 241, 0.4)' }}>
+                    {Math.abs(autoRotateSpeed).toFixed(1)}x
+                  </span>
+                  <button
+                    onClick={() => setSpeedMenuOpen(false)}
+                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Speed Slider with - and + Control Buttons */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* Minus (-) Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentMag = Math.abs(autoRotateSpeed);
+                      const newMag = Math.max(0.1, parseFloat((currentMag - 0.1).toFixed(1)));
+                      const sign = autoRotateSpeed < 0 ? -1 : 1;
+                      setAutoRotateSpeed(parseFloat((newMag * sign).toFixed(1)));
+                    }}
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(99, 102, 241, 0.3)'; e.currentTarget.style.borderColor = '#6366f1'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)'; }}
+                    title="Decrease Speed (-0.1x)"
+                  >
+                    <Minus size={13} />
+                  </button>
+
+                  {/* Range Slider */}
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="4.0"
+                    step="0.1"
+                    value={Math.abs(autoRotateSpeed)}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      const sign = autoRotateSpeed < 0 ? -1 : 1;
+                      setAutoRotateSpeed(parseFloat((val * sign).toFixed(1)));
+                    }}
+                    style={{
+                      flex: 1,
+                      accentColor: '#6366f1',
+                      cursor: 'pointer',
+                      height: '6px'
+                    }}
+                  />
+
+                  {/* Plus (+) Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentMag = Math.abs(autoRotateSpeed);
+                      const newMag = Math.min(4.0, parseFloat((currentMag + 0.1).toFixed(1)));
+                      const sign = autoRotateSpeed < 0 ? -1 : 1;
+                      setAutoRotateSpeed(parseFloat((newMag * sign).toFixed(1)));
+                    }}
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(99, 102, 241, 0.3)'; e.currentTarget.style.borderColor = '#6366f1'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)'; }}
+                    title="Increase Speed (+0.1x)"
+                  >
+                    <Plus size={13} />
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: '#94a3b8', fontWeight: 600, padding: '0 2px' }}>
+                  <span>0.1x (Slow)</span>
+                  <span>4.0x (Fast)</span>
+                </div>
+              </div>
+
+              {/* Direction Toggle Row */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (autoRotateSpeed > 0) setAutoRotateSpeed(-Math.abs(autoRotateSpeed));
+                    }}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      background: autoRotateSpeed < 0 ? 'rgba(99, 102, 241, 0.35)' : 'rgba(255, 255, 255, 0.05)',
+                      border: autoRotateSpeed < 0 ? '1px solid #6366f1' : '1px solid rgba(255, 255, 255, 0.1)',
+                      color: autoRotateSpeed < 0 ? '#ffffff' : '#94a3b8',
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    title="Rotate Counter-Clockwise (Left)"
+                  >
+                    <RotateCcw size={11} />
+                    <span>Left</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (autoRotateSpeed < 0) setAutoRotateSpeed(Math.abs(autoRotateSpeed));
+                    }}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      background: autoRotateSpeed > 0 ? 'rgba(99, 102, 241, 0.35)' : 'rgba(255, 255, 255, 0.05)',
+                      border: autoRotateSpeed > 0 ? '1px solid #6366f1' : '1px solid rgba(255, 255, 255, 0.1)',
+                      color: autoRotateSpeed > 0 ? '#ffffff' : '#94a3b8',
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    title="Rotate Clockwise (Right)"
+                  >
+                    <RotateCw size={11} />
+                    <span>Right</span>
+                  </button>
+                </div>
+
+                {/* Reset Button */}
+                <button
+                  type="button"
+                  onClick={() => setAutoRotateSpeed(1.0)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#818cf8',
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    padding: '4px 6px'
+                  }}
+                  title="Reset to default 1.0x"
+                >
+                  Reset (1.0x)
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Autoplay / Auto-Rotate 360 Toggle Button */}
         <button
           className={`smart-zoom-btn ${autoRotate ? 'active-360' : ''}`}
           onClick={() => setAutoRotate(!autoRotate)}
-          title={autoRotate ? "Pause 360° Auto-Rotation" : "Start 360° Auto-Rotation"}
+          title={autoRotate ? `Pause 360° Auto-Rotation (${Math.abs(autoRotateSpeed)}x)` : `Start 360° Auto-Rotation (${Math.abs(autoRotateSpeed)}x)`}
           style={{
             width: '2.5rem',
             height: '2.5rem',
@@ -1845,7 +2115,14 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
           }}
         >
-          <RotateCw size={15} className={autoRotate ? 'spin' : ''} style={autoRotate ? { animationDuration: '4s' } : undefined} />
+          <RotateCw
+            size={15}
+            className={autoRotate ? 'spin' : ''}
+            style={autoRotate ? {
+              animationDuration: `${Math.max(0.6, Math.min(10, 4 / Math.abs(autoRotateSpeed || 1)))}s`,
+              animationDirection: autoRotateSpeed < 0 ? 'reverse' : 'normal'
+            } : undefined}
+          />
         </button>
 
         {/* Zoom Controls */}
