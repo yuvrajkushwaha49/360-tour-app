@@ -1,5 +1,6 @@
 import { ImageAdjustments, DEFAULT_ADJUSTMENTS, injectAdjustmentsShader } from '../utils/imageAdjustmentEngine';
 import React, { useRef, useState, useCallback, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
@@ -628,96 +629,128 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
   onNavigate,
   setActiveInfoId
 }) => {
+  const anchorRef = React.useRef<HTMLDivElement>(null);
   const cardRef = React.useRef<HTMLDivElement>(null);
-  const [placement, setPlacement] = React.useState<{
-    isDownside: boolean;
-    align: 'center' | 'left' | 'right';
-  }>({ isDownside: false, align: 'center' });
+  const [coords, setCoords] = React.useState<{
+    visible: boolean;
+    left: number;
+    top: number | 'auto';
+    bottom: number | 'auto';
+    maxHeight: number;
+  }>({ visible: false, left: 0, top: 'auto', bottom: 'auto', maxHeight: 420 });
 
   React.useLayoutEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setCoords(prev => ({ ...prev, visible: false }));
+      return;
+    }
 
-    const computePlacement = () => {
-      if (!cardRef.current) return;
-      const parentEl = cardRef.current.parentElement;
+    let isMounted = true;
+    let animId: number;
+
+    const updatePosition = () => {
+      if (!isMounted) return;
+      const anchorEl = anchorRef.current;
+      if (!anchorEl) return;
+
+      const parentEl = anchorEl.parentElement;
       if (!parentEl) return;
 
       const parentRect = parentEl.getBoundingClientRect();
-      const windowH = window.innerHeight;
-      const windowW = window.innerWidth;
-
-      // Estimated or actual card height (default to 380px since cards with photos are taller)
-      const cardH = cardRef.current.offsetHeight || 380;
-      const cardW = cardRef.current.offsetWidth || 290;
-
-      // Safe top clearance for the floating top navbar (~95px)
-      const topMargin = 95;
-      const spaceAbove = parentRect.top - topMargin;
-
-      // If spaceAbove is less than card height + 30px buffer OR hotspot is in upper 55% of viewport:
-      // ALWAYS open DOWNSIDE to guarantee it never goes under or touches the top header!
-      const isDownside = spaceAbove < (cardH + 30) || (parentRect.top < windowH * 0.55);
-
-      // Horizontal edge protection (prevent cut off by left sidebar or right boundaries)
-      let align: 'center' | 'left' | 'right' = 'center';
-      const halfW = cardW / 2;
-      const centerX = parentRect.left + parentRect.width / 2;
-      if (centerX - halfW < 30) {
-        align = 'left';
-      } else if (centerX + halfW > windowW - 30) {
-        align = 'right';
+      if (parentRect.width === 0 && parentRect.height === 0) {
+        setCoords(prev => ({ ...prev, visible: false }));
+        animId = requestAnimationFrame(updatePosition);
+        return;
       }
 
-      setPlacement({ isDownside, align });
+      const windowH = window.innerHeight;
+      const windowW = window.innerWidth;
+      const cardW = cardRef.current?.offsetWidth || 300;
+      const cardH = cardRef.current?.offsetHeight || 360;
+
+      const topMargin = 95; // Top navigation bar safe clearance
+      const bottomMargin = 125; // Bottom carousel safe clearance
+
+      const spaceAbove = parentRect.top - topMargin;
+      const spaceBelow = windowH - parentRect.bottom - bottomMargin;
+
+      // Smart flip downside: If space above is not enough for card height OR parent is in top half of screen
+      let isDownside = false;
+      if (spaceAbove < cardH + 20 || parentRect.top < 380 || (spaceAbove < 350 && spaceBelow > spaceAbove)) {
+        isDownside = true;
+      }
+
+      let computedTop: number | 'auto' = 'auto';
+      let computedBottom: number | 'auto' = 'auto';
+      let maxHeight = 420;
+
+      if (isDownside) {
+        computedTop = Math.max(topMargin + 10, parentRect.bottom + 12);
+        maxHeight = Math.max(180, windowH - computedTop - bottomMargin);
+      } else {
+        computedBottom = Math.max(bottomMargin + 10, windowH - parentRect.top + 12);
+        maxHeight = Math.max(180, parentRect.top - topMargin - 12);
+      }
+
+      const centerX = parentRect.left + parentRect.width / 2;
+      const minLeft = 16;
+      const maxLeft = Math.max(minLeft, windowW - cardW - 16);
+      const clampedLeft = Math.max(minLeft, Math.min(maxLeft, centerX - cardW / 2));
+
+      setCoords({
+        visible: true,
+        left: clampedLeft,
+        top: computedTop,
+        bottom: computedBottom,
+        maxHeight
+      });
+
+      animId = requestAnimationFrame(updatePosition);
     };
 
-    computePlacement();
-    const id1 = requestAnimationFrame(computePlacement);
-    const id2 = setTimeout(computePlacement, 50);
-    window.addEventListener('resize', computePlacement);
+    updatePosition();
     return () => {
-      cancelAnimationFrame(id1);
-      clearTimeout(id2);
-      window.removeEventListener('resize', computePlacement);
+      isMounted = false;
+      cancelAnimationFrame(animId);
     };
   }, [isOpen, h]);
 
-  if (!hasDetails || !isOpen) return null;
-
-  const positionStyle: React.CSSProperties = {
-    position: 'absolute',
-    ...(placement.isDownside
-      ? { top: 'calc(100% + 14px)', bottom: 'auto' }
-      : { bottom: 'calc(100% + 14px)', top: 'auto' }),
-    ...(placement.align === 'center'
-      ? { left: '50%', right: 'auto', transform: 'translateX(-50%)' }
-      : placement.align === 'left'
-      ? { left: '0', right: 'auto', transform: 'none' }
-      : { right: '0', left: 'auto', transform: 'none' }),
-    background: 'rgba(9, 13, 24, 0.96)',
-    backdropFilter: 'blur(24px)',
-    WebkitBackdropFilter: 'blur(24px)',
-    border: `1px solid ${h.beaconColor ? `${h.beaconColor}99` : 'rgba(99, 102, 241, 0.5)'}`,
-    borderRadius: '14px',
-    padding: '12px 16px',
-    width: '290px',
-    maxWidth: '85vw',
-    maxHeight: 'calc(100vh - 220px)',
-    overflowY: 'auto',
-    color: '#ffffff',
-    boxShadow: `0 25px 60px rgba(0,0,0,0.95), 0 0 25px ${h.beaconColor ? `${h.beaconColor}44` : 'rgba(99, 102, 241, 0.3)'}`,
-    zIndex: 999999,
-    pointerEvents: 'auto',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    transition: 'top 0.15s ease, bottom 0.15s ease'
-  };
+  if (!hasDetails || !isOpen) return <div ref={anchorRef} style={{ display: 'none' }} />;
 
   const hsPhotos = (h as any).gallery || (h as any).galleryPhotos || (h.targetLocationId ? locations?.find((l: any) => l.id === h.targetLocationId)?.gallery : null) || (galleryPhotos && galleryPhotos.length > 0 ? galleryPhotos : null);
 
-  return (
-    <div ref={cardRef} style={positionStyle}>
+  const cardContent = (
+    <div
+      ref={cardRef}
+      onMouseEnter={() => { setActiveInfoId(h.id); }}
+      onMouseLeave={() => { setActiveInfoId(null); }}
+      style={{
+        position: 'fixed',
+        left: `${coords.left}px`,
+        top: coords.top !== 'auto' ? `${coords.top}px` : 'auto',
+        bottom: coords.bottom !== 'auto' ? `${coords.bottom}px` : 'auto',
+        maxHeight: `${coords.maxHeight}px`,
+        width: '300px',
+        maxWidth: 'calc(100vw - 32px)',
+        background: 'rgba(9, 13, 24, 0.98)',
+        backdropFilter: 'blur(28px)',
+        WebkitBackdropFilter: 'blur(28px)',
+        border: `1px solid ${h.beaconColor ? `${h.beaconColor}aa` : 'rgba(99, 102, 241, 0.6)'}`,
+        borderRadius: '16px',
+        padding: '14px 16px',
+        color: '#ffffff',
+        boxShadow: `0 30px 70px rgba(0,0,0,0.95), 0 0 30px ${h.beaconColor ? `${h.beaconColor}55` : 'rgba(99, 102, 241, 0.35)'}`,
+        zIndex: 99999999,
+        pointerEvents: 'auto',
+        display: coords.visible ? 'flex' : 'none',
+        flexDirection: 'column',
+        gap: '9px',
+        overflowY: 'auto',
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'rgba(255,255,255,0.2) transparent',
+        visibility: coords.visible ? 'visible' : 'hidden'
+      }}
+    >
       {/* Photo Slider (Target room gallery or hotspot specific photos) */}
       {hsPhotos && Array.isArray(hsPhotos) && hsPhotos.length > 0 && (
         <HotspotPhotoSlider photos={hsPhotos} />
@@ -728,10 +761,10 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div
             style={{
-              width: '22px',
-              height: '22px',
-              borderRadius: '6px',
-              background: h.beaconColor ? `${h.beaconColor}33` : 'rgba(99, 102, 241, 0.2)',
+              width: '24px',
+              height: '24px',
+              borderRadius: '7px',
+              background: h.beaconColor ? `${h.beaconColor}33` : 'rgba(99, 102, 241, 0.25)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -741,7 +774,7 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
           >
             {renderHotspotIcon(h.icon, h.customIconUrl, 14)}
           </div>
-          <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#ffffff' }}>{h.name}</span>
+          <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#ffffff' }}>{h.name}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           {h.subtitle && (
@@ -792,7 +825,7 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
 
       {/* Area Tag if present */}
       {h.area && (
-        <div style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <div style={{ fontSize: '0.74rem', color: '#f59e0b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span>📐 Area:</span>
           <span style={{ color: '#fde68a' }}>{h.area}</span>
         </div>
@@ -802,13 +835,11 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
       {h.description && (
         <div
           style={{
-            fontSize: '0.74rem',
+            fontSize: '0.75rem',
             color: '#cbd5e1',
             lineHeight: '1.45',
             wordBreak: 'break-word',
-            whiteSpace: 'normal',
-            maxHeight: '140px',
-            overflowY: 'auto'
+            whiteSpace: 'normal'
           }}
         >
           {h.description}
@@ -820,24 +851,25 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
+            setActiveInfoId(null);
             onNavigate(h.targetLocationId!, h.position);
           }}
           style={{
             marginTop: '4px',
             width: '100%',
-            padding: '6px 10px',
+            padding: '7px 12px',
             borderRadius: '8px',
             background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
             border: 'none',
             color: '#ffffff',
-            fontSize: '0.75rem',
+            fontSize: '0.78rem',
             fontWeight: 700,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '6px',
-            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)'
+            boxShadow: '0 4px 14px rgba(99, 102, 241, 0.45)'
           }}
         >
           <span>Explore Space</span>
@@ -845,6 +877,13 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
         </button>
       )}
     </div>
+  );
+
+  return (
+    <>
+      <div ref={anchorRef} style={{ position: 'absolute', width: 1, height: 1, pointerEvents: 'none', opacity: 0 }} />
+      {ReactDOM.createPortal(cardContent, document.body)}
+    </>
   );
 };
 
