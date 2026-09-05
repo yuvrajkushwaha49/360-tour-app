@@ -54,6 +54,7 @@ export const ImageAdjustmentPanel: React.FC<ImageAdjustmentPanelProps> = ({
 }) => {
   const [copiedAdj, setCopiedAdj] = useState<ImageAdjustments | null>(null);
   const [copiedToast, setCopiedToast] = useState<boolean>(false);
+  const [appliedToast, setAppliedToast] = useState<string | null>(null);
   const [showSelectModal, setShowSelectModal] = useState<boolean>(false);
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
 
@@ -134,9 +135,9 @@ export const ImageAdjustmentPanel: React.FC<ImageAdjustmentPanelProps> = ({
 
   const handleConfirmApplyToAll = () => {
     if (locations.length === 0) return;
-    const confirmMsg = `Apply current adjustment settings to ALL ${locations.length} room(s) in this tour?`;
-    if (!window.confirm(confirmMsg)) return;
     onApplyToAll(adjustments);
+    setAppliedToast(`✅ Applied & saved to all ${locations.length} rooms!`);
+    setTimeout(() => setAppliedToast(null), 3500);
     if (onAddLog) onAddLog(`Applied image adjustments to all ${locations.length} rooms`);
   };
 
@@ -144,6 +145,8 @@ export const ImageAdjustmentPanel: React.FC<ImageAdjustmentPanelProps> = ({
     if (selectedLocationIds.length === 0) return;
     onApplyToSelected(selectedLocationIds, adjustments);
     setShowSelectModal(false);
+    setAppliedToast(`✅ Applied & saved to ${selectedLocationIds.length} selected rooms!`);
+    setTimeout(() => setAppliedToast(null), 3500);
     if (onAddLog) onAddLog(`Applied image adjustments to ${selectedLocationIds.length} selected rooms`);
   };
 
@@ -311,6 +314,45 @@ export const ImageAdjustmentPanel: React.FC<ImageAdjustmentPanelProps> = ({
           </button>
         </div>
       </div>
+
+      {appliedToast && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.25))',
+          border: '1px solid rgba(16, 185, 129, 0.5)',
+          color: '#6ee7b7',
+          padding: '8px 12px',
+          borderRadius: '8px',
+          fontSize: '0.75rem',
+          fontWeight: 700,
+          marginBottom: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          boxShadow: '0 4px 14px rgba(16, 185, 129, 0.2)'
+        }}>
+          <Check size={14} className="text-emerald-400" />
+          <span>{appliedToast}</span>
+        </div>
+      )}
+
+      {copiedToast && (
+        <div style={{
+          background: 'rgba(99, 102, 241, 0.25)',
+          border: '1px solid rgba(99, 102, 241, 0.5)',
+          color: '#c7d2fe',
+          padding: '6px 12px',
+          borderRadius: '8px',
+          fontSize: '0.74rem',
+          fontWeight: 600,
+          marginBottom: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px'
+        }}>
+          <Check size={13} />
+          <span>Settings copied to clipboard!</span>
+        </div>
+      )}
 
       <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '8px', padding: '8px 12px', marginBottom: '14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

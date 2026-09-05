@@ -244,35 +244,101 @@ export default function App() {
 
   const [activeRightTab, setActiveRightTab] = useState<'stitch' | 'adjustments'>('stitch');
 
+  const syncLocationsToStorageAndServer = async (updatedLocs: LocationItem[]) => {
+    // 1. Instantly save to studio_draft_project
+    const draftData = {
+      id: currentProjectId || `proj-${Date.now()}`,
+      name: crmProjectName || '360 Virtual Tour',
+      projectDir,
+      locations: updatedLocs,
+      activeLocationId,
+      resolution,
+      featureDetector,
+      blendingMode,
+      exposureCorrection,
+      lastUpdated: Date.now()
+    };
+    saveLargeDraft('studio_draft_project', draftData);
+
+    // 2. Instantly update local_saved_projects in localStorage
+    try {
+      const localListStr = localStorage.getItem('local_saved_projects') || '[]';
+      const localList: any[] = JSON.parse(localListStr);
+      if (currentProjectId) {
+        const idx = localList.findIndex((p: any) => p.id === currentProjectId);
+        if (idx >= 0) {
+          localList[idx].data = {
+            ...localList[idx].data,
+            locations: updatedLocs
+          };
+          safeLocalStorageSet('local_saved_projects', JSON.stringify(localList));
+        }
+      }
+    } catch (e) { }
+
+    // 3. Save to backend database (/api/projects/:id)
+    const token = authToken || localStorage.getItem('crm_token');
+    if (currentProjectId && token) {
+      try {
+        const projectData: ProjectData = {
+          projectDir,
+          locations: updatedLocs,
+          activeLocationId,
+          resolution,
+          featureDetector,
+          blendingMode,
+          exposureCorrection
+        };
+
+        await fetch(`${API_BASE_URL}/api/projects/${currentProjectId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            name: crmProjectName || '360 Virtual Tour',
+            data: projectData,
+            is_public: crmProjectIsPublic
+          })
+        });
+      } catch (err: any) {
+        console.warn('Auto-save adjustments error:', err);
+      }
+    }
+  };
+
   const handleUpdateActiveLocAdjustments = (newAdj: ImageAdjustments) => {
-    setLocations((prevLocs) =>
-      prevLocs.map((loc) =>
+    setLocations((prevLocs) => {
+      const updated = prevLocs.map((loc) =>
         loc.id === activeLocationId
           ? { ...loc, adjustments: newAdj }
           : loc
-      )
-    );
+      );
+      syncLocationsToStorageAndServer(updated);
+      return updated;
+    });
   };
 
   const handleApplyAdjustmentsToAll = (newAdj: ImageAdjustments) => {
-    setLocations((prevLocs) =>
-      prevLocs.map((loc) => ({
-        ...loc,
-        adjustments: { ...newAdj }
-      }))
-    );
-    addLog(`Applied image adjustments to all ${locations.length} locations`);
+    const updatedLocs = locations.map((loc) => ({
+      ...loc,
+      adjustments: { ...newAdj }
+    }));
+    setLocations(updatedLocs);
+    syncLocationsToStorageAndServer(updatedLocs);
+    addLog(`Applied & saved image adjustments to all ${locations.length} locations`);
   };
 
   const handleApplyAdjustmentsToSelected = (targetIds: string[], newAdj: ImageAdjustments) => {
-    setLocations((prevLocs) =>
-      prevLocs.map((loc) =>
-        targetIds.includes(loc.id)
-          ? { ...loc, adjustments: { ...newAdj } }
-          : loc
-      )
+    const updatedLocs = locations.map((loc) =>
+      targetIds.includes(loc.id)
+        ? { ...loc, adjustments: { ...newAdj } }
+        : loc
     );
-    addLog(`Applied image adjustments to ${targetIds.length} selected locations`);
+    setLocations(updatedLocs);
+    syncLocationsToStorageAndServer(updatedLocs);
+    addLog(`Applied & saved image adjustments to ${targetIds.length} selected locations`);
   };
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
