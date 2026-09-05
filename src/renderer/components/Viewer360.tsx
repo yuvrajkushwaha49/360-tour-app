@@ -1,6 +1,6 @@
 import { ImageAdjustments, DEFAULT_ADJUSTMENTS, injectAdjustmentsShader } from '../utils/imageAdjustmentEngine';
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import ReactDOM from 'react-dom';
+import { createPortal } from 'react-dom';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
@@ -632,126 +632,106 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
   const anchorRef = React.useRef<HTMLDivElement>(null);
   const cardRef = React.useRef<HTMLDivElement>(null);
   const [coords, setCoords] = React.useState<{
-    visible: boolean;
+    top?: number;
+    bottom?: number;
     left: number;
-    top: number | 'auto';
-    bottom: number | 'auto';
     maxHeight: number;
-  }>({ visible: false, left: 0, top: 'auto', bottom: 'auto', maxHeight: 420 });
+  } | null>(null);
 
-  React.useLayoutEffect(() => {
-    if (!isOpen) {
-      setCoords(prev => ({ ...prev, visible: false }));
+  React.useEffect(() => {
+    if (!isOpen || !hasDetails) {
+      setCoords(null);
       return;
     }
 
-    let isMounted = true;
-    let animId: number;
-
-    const updatePosition = () => {
-      if (!isMounted) return;
-      const anchorEl = anchorRef.current;
-      if (!anchorEl) return;
-
-      const parentEl = anchorEl.parentElement;
-      if (!parentEl) return;
+    let active = true;
+    const compute = () => {
+      if (!active) return;
+      if (!anchorRef.current) {
+        requestAnimationFrame(compute);
+        return;
+      }
+      const parentEl = anchorRef.current.parentElement;
+      if (!parentEl) {
+        requestAnimationFrame(compute);
+        return;
+      }
 
       const parentRect = parentEl.getBoundingClientRect();
+      // If parent is not visible or 0-size
       if (parentRect.width === 0 && parentRect.height === 0) {
-        setCoords(prev => ({ ...prev, visible: false }));
-        animId = requestAnimationFrame(updatePosition);
+        requestAnimationFrame(compute);
         return;
       }
 
       const windowH = window.innerHeight;
       const windowW = window.innerWidth;
-      const cardW = cardRef.current?.offsetWidth || 300;
-      const cardH = cardRef.current?.offsetHeight || 360;
 
-      const topMargin = 95; // Top navigation bar safe clearance
-      const bottomMargin = 125; // Bottom carousel safe clearance
-
+      // Safe boundaries for header (~80px) and bottom carousel (~120px)
+      const topMargin = 85;
+      const bottomMargin = 120;
       const spaceAbove = parentRect.top - topMargin;
       const spaceBelow = windowH - parentRect.bottom - bottomMargin;
 
-      // Smart flip downside: If space above is not enough for card height OR parent is in top half of screen
-      let isDownside = false;
-      if (spaceAbove < cardH + 20 || parentRect.top < 380 || (spaceAbove < 350 && spaceBelow > spaceAbove)) {
-        isDownside = true;
-      }
+      const cardW = Math.min(300, windowW - 32);
+      const centerX = parentRect.left + parentRect.width / 2;
+      const left = Math.max(16, Math.min(windowW - cardW - 16, centerX - cardW / 2));
 
-      let computedTop: number | 'auto' = 'auto';
-      let computedBottom: number | 'auto' = 'auto';
-      let maxHeight = 420;
+      // Decide downside vs upside:
+      // If spaceAbove is less than 380px, or spaceBelow has more room than spaceAbove: open downside!
+      const isDownside = spaceAbove < 380 || (spaceAbove < 420 && spaceBelow > spaceAbove);
 
       if (isDownside) {
-        computedTop = Math.max(topMargin + 10, parentRect.bottom + 12);
-        maxHeight = Math.max(180, windowH - computedTop - bottomMargin);
+        const top = Math.max(topMargin, parentRect.bottom + 12);
+        const maxHeight = Math.max(240, windowH - top - bottomMargin);
+        setCoords({ top, left, maxHeight });
       } else {
-        computedBottom = Math.max(bottomMargin + 10, windowH - parentRect.top + 12);
-        maxHeight = Math.max(180, parentRect.top - topMargin - 12);
+        const bottom = Math.max(bottomMargin, windowH - parentRect.top + 12);
+        const maxHeight = Math.max(240, windowH - bottom - topMargin);
+        setCoords({ bottom, left, maxHeight });
       }
 
-      const centerX = parentRect.left + parentRect.width / 2;
-      const minLeft = 16;
-      const maxLeft = Math.max(minLeft, windowW - cardW - 16);
-      const clampedLeft = Math.max(minLeft, Math.min(maxLeft, centerX - cardW / 2));
-
-      setCoords({
-        visible: true,
-        left: clampedLeft,
-        top: computedTop,
-        bottom: computedBottom,
-        maxHeight
-      });
-
-      animId = requestAnimationFrame(updatePosition);
+      requestAnimationFrame(compute);
     };
 
-    updatePosition();
+    compute();
     return () => {
-      isMounted = false;
-      cancelAnimationFrame(animId);
+      active = false;
     };
-  }, [isOpen, h]);
-
-  if (!hasDetails || !isOpen) return <div ref={anchorRef} style={{ display: 'none' }} />;
+  }, [isOpen, hasDetails, h]);
 
   const hsPhotos = (h as any).gallery || (h as any).galleryPhotos || (h.targetLocationId ? locations?.find((l: any) => l.id === h.targetLocationId)?.gallery : null) || (galleryPhotos && galleryPhotos.length > 0 ? galleryPhotos : null);
 
-  const cardContent = (
+  const cardContent = (isOpen && hasDetails && coords) ? (
     <div
       ref={cardRef}
-      onMouseEnter={() => { setActiveInfoId(h.id); }}
-      onMouseLeave={() => { setActiveInfoId(null); }}
+      onMouseEnter={() => setActiveInfoId(h.id)}
+      onMouseLeave={() => setActiveInfoId(null)}
       style={{
         position: 'fixed',
+        ...(coords.top !== undefined ? { top: `${coords.top}px`, bottom: 'auto' } : { bottom: `${coords.bottom}px`, top: 'auto' }),
         left: `${coords.left}px`,
-        top: coords.top !== 'auto' ? `${coords.top}px` : 'auto',
-        bottom: coords.bottom !== 'auto' ? `${coords.bottom}px` : 'auto',
-        maxHeight: `${coords.maxHeight}px`,
         width: '300px',
         maxWidth: 'calc(100vw - 32px)',
-        background: 'rgba(9, 13, 24, 0.98)',
-        backdropFilter: 'blur(28px)',
-        WebkitBackdropFilter: 'blur(28px)',
-        border: `1px solid ${h.beaconColor ? `${h.beaconColor}aa` : 'rgba(99, 102, 241, 0.6)'}`,
-        borderRadius: '16px',
-        padding: '14px 16px',
-        color: '#ffffff',
-        boxShadow: `0 30px 70px rgba(0,0,0,0.95), 0 0 30px ${h.beaconColor ? `${h.beaconColor}55` : 'rgba(99, 102, 241, 0.35)'}`,
-        zIndex: 99999999,
-        pointerEvents: 'auto',
-        display: coords.visible ? 'flex' : 'none',
-        flexDirection: 'column',
-        gap: '9px',
+        maxHeight: `${coords.maxHeight}px`,
         overflowY: 'auto',
-        scrollbarWidth: 'thin',
-        scrollbarColor: 'rgba(255,255,255,0.2) transparent',
-        visibility: coords.visible ? 'visible' : 'hidden'
+        background: 'rgba(9, 13, 24, 0.96)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        border: `1px solid ${h.beaconColor ? `${h.beaconColor}99` : 'rgba(99, 102, 241, 0.5)'}`,
+        borderRadius: '14px',
+        padding: '12px 16px',
+        color: '#ffffff',
+        boxShadow: `0 25px 60px rgba(0,0,0,0.9), 0 0 25px ${h.beaconColor ? `${h.beaconColor}44` : 'rgba(99, 102, 241, 0.3)'}`,
+        zIndex: 999999999, // Sabse Upar (Top-most layer above all navbars)
+        pointerEvents: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        userSelect: 'none'
       }}
     >
-      {/* Photo Slider (Target room gallery or hotspot specific photos) */}
+      {/* Photo Slider */}
       {hsPhotos && Array.isArray(hsPhotos) && hsPhotos.length > 0 && (
         <HotspotPhotoSlider photos={hsPhotos} />
       )}
@@ -761,10 +741,10 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div
             style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '7px',
-              background: h.beaconColor ? `${h.beaconColor}33` : 'rgba(99, 102, 241, 0.25)',
+              width: '22px',
+              height: '22px',
+              borderRadius: '6px',
+              background: h.beaconColor ? `${h.beaconColor}33` : 'rgba(99, 102, 241, 0.2)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -774,7 +754,7 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
           >
             {renderHotspotIcon(h.icon, h.customIconUrl, 14)}
           </div>
-          <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#ffffff' }}>{h.name}</span>
+          <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#ffffff' }}>{h.name}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           {h.subtitle && (
@@ -825,7 +805,7 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
 
       {/* Area Tag if present */}
       {h.area && (
-        <div style={{ fontSize: '0.74rem', color: '#f59e0b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <div style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span>📐 Area:</span>
           <span style={{ color: '#fde68a' }}>{h.area}</span>
         </div>
@@ -835,11 +815,13 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
       {h.description && (
         <div
           style={{
-            fontSize: '0.75rem',
+            fontSize: '0.74rem',
             color: '#cbd5e1',
             lineHeight: '1.45',
             wordBreak: 'break-word',
-            whiteSpace: 'normal'
+            whiteSpace: 'normal',
+            maxHeight: '140px',
+            overflowY: 'auto'
           }}
         >
           {h.description}
@@ -851,25 +833,24 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setActiveInfoId(null);
             onNavigate(h.targetLocationId!, h.position);
           }}
           style={{
             marginTop: '4px',
             width: '100%',
-            padding: '7px 12px',
+            padding: '6px 10px',
             borderRadius: '8px',
             background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
             border: 'none',
             color: '#ffffff',
-            fontSize: '0.78rem',
+            fontSize: '0.75rem',
             fontWeight: 700,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '6px',
-            boxShadow: '0 4px 14px rgba(99, 102, 241, 0.45)'
+            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)'
           }}
         >
           <span>Explore Space</span>
@@ -877,12 +858,12 @@ const SmartHotspotDetailCard: React.FC<SmartHotspotDetailCardProps> = ({
         </button>
       )}
     </div>
-  );
+  ) : null;
 
   return (
     <>
-      <div ref={anchorRef} style={{ position: 'absolute', width: 1, height: 1, pointerEvents: 'none', opacity: 0 }} />
-      {ReactDOM.createPortal(cardContent, document.body)}
+      <div ref={anchorRef} style={{ width: 0, height: 0, pointerEvents: 'none' }} />
+      {typeof document !== 'undefined' && cardContent ? createPortal(cardContent, document.body) : null}
     </>
   );
 };
