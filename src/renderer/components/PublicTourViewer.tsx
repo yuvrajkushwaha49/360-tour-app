@@ -20,6 +20,8 @@ import {
   Star,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   RotateCw,
   RotateCcw,
   Gauge,
@@ -44,7 +46,13 @@ import {
   Camera,
   Loader2,
   Save,
-  Copy
+  Copy,
+  Film,
+  Play,
+  Volume2,
+  VolumeX,
+  Video,
+  Target
 } from 'lucide-react';
 import Viewer360, { Viewer360Ref } from './Viewer360';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
@@ -76,6 +84,36 @@ interface PublicTourViewerProps {
   onLogin?: () => void;
 }
 
+// Universal Video / Embed Resolver (supports YouTube, Vimeo, and Direct HTML5 / CloudFront video URLs)
+export function getMediaEmbed(rawUrl: string): { type: 'youtube' | 'vimeo' | 'video' | 'none'; url: string } {
+  if (!rawUrl || typeof rawUrl !== 'string') return { type: 'none', url: '' };
+  const url = rawUrl.trim();
+
+  // YouTube match (standard, short, embed)
+  const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/);
+  if (ytMatch && ytMatch[1]) {
+    return {
+      type: 'youtube',
+      url: `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&mute=1&enablejsapi=1&controls=0&rel=0&playsinline=1&loop=1`
+    };
+  }
+
+  // Vimeo match
+  const vimeoMatch = url.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/([^\/]*)\/videos\/|album\/(\d+)\/video\/|video\/|)(\d+)(?:$|\/|\?)/);
+  if (vimeoMatch && vimeoMatch[3]) {
+    return {
+      type: 'vimeo',
+      url: `https://player.vimeo.com/video/${vimeoMatch[3]}?autoplay=1&muted=1&background=1`
+    };
+  }
+
+  // Direct HTML5 Video (CloudFront / S3 / local MP4/WebM)
+  return {
+    type: 'video',
+    url: toCloudFrontUrl(url)
+  };
+}
+
 export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTourViewerProps) {
   const [tourName, setTourName] = useState<string>('');
   const [tourData, setTourData] = useState<any>(null);
@@ -86,14 +124,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isPrivate, setIsPrivate] = useState<boolean>(false);
-  const [rightSidebarOpen, setRightSidebarOpen] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('tour_right_sidebar_open');
-      return saved !== null ? JSON.parse(saved) : true;
-    } catch {
-      return true;
-    }
-  });
+  const [rightSidebarOpen, setRightSidebarOpen] = useState<boolean>(false);
 
   // Temporary Share Link Expiration & Tamper-Proof Cryptographic Verification
   const initialShareStatus = (() => {
@@ -172,6 +203,27 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [isSavingHotspot, setIsSavingHotspot] = useState<boolean>(false);
   const [isUploadingHotspotTargetThumb, setIsUploadingHotspotTargetThumb] = useState<boolean>(false);
 
+  // Intro Video States
+  const [introVideoUrl, setIntroVideoUrl] = useState<string>('');
+  const [introVideoTitle, setIntroVideoTitle] = useState<string>('');
+  const [introVideoEnabled, setIntroVideoEnabled] = useState<boolean>(true);
+  const [showIntroVideo, setShowIntroVideo] = useState<boolean>(false);
+  const [hasWatchedIntro, setHasWatchedIntro] = useState<boolean>(false);
+  const [isUploadingIntroVideo, setIsUploadingIntroVideo] = useState<boolean>(false);
+  const [isSavingIntroVideo, setIsSavingIntroVideo] = useState<boolean>(false);
+  const [isEditingIntroVideo, setIsEditingIntroVideo] = useState<boolean>(false);
+  const [videoFormUrl, setVideoFormUrl] = useState<string>('');
+  const [videoFormTitle, setVideoFormTitle] = useState<string>('');
+  const [videoFormEnabled, setVideoFormEnabled] = useState<boolean>(true);
+  const [introVideoMuted, setIntroVideoMuted] = useState<boolean>(true);
+  const [introVideoPaused, setIntroVideoPaused] = useState<boolean>(false);
+  const [isExitingIntro, setIsExitingIntro] = useState<boolean>(false);
+  const [introVideoProgress, setIntroVideoProgress] = useState<number>(0);
+  const [introVideoDuration, setIntroVideoDuration] = useState<number>(0);
+  const [introVideoCurrentTime, setIntroVideoCurrentTime] = useState<number>(0);
+  const [hotspotsEnabled, setHotspotsEnabled] = useState<boolean>(false);
+  const introVideoRef = useRef<HTMLVideoElement>(null);
+
   // Check if current logged-in user is admin
   const currentUser = (() => {
     try {
@@ -186,14 +238,9 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   // Smart City Portal UI States
   const [activeNavTab, setActiveNavTab] = useState<string>('overview');
   const [timeOfDay, setTimeOfDay] = useState<'day' | 'sunset' | 'night'>('day');
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('tour_left_sidebar_open');
-      return saved !== null ? JSON.parse(saved) : true;
-    } catch {
-      return true;
-    }
-  });
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const [quickExploreOpen, setQuickExploreOpen] = useState<boolean>(false);
+  const [mobileTopNavOpen, setMobileTopNavOpen] = useState<boolean>(true);
   const [autoRotate, setAutoRotate] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('tour_auto_rotate');
@@ -212,6 +259,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   });
   const [speedMenuOpen, setSpeedMenuOpen] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isSavingStartView, setIsSavingStartView] = useState<boolean>(false);
+  const [saveStartViewSuccess, setSaveStartViewSuccess] = useState<boolean>(false);
   const carouselScrollRef = useRef<HTMLDivElement>(null);
   const viewer360Ref = useRef<Viewer360Ref>(null);
 
@@ -380,6 +429,39 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     return updatedTourData;
   };
 
+  // Helper to persist tour-level updates to backend
+  const saveUpdatedTourData = async (tourUpdates: Record<string, any>) => {
+    if (!isAdmin) {
+      console.warn('Unauthorized attempt to modify tour settings');
+      return;
+    }
+    const updatedTourData = {
+      ...(tourData || {}),
+      ...tourUpdates
+    };
+
+    const token = localStorage.getItem('crm_token') || localStorage.getItem('token');
+    const res = await fetch(`${API_BASE_URL}/api/projects/${tourId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token ? `Bearer ${token}` : ''
+      },
+      body: JSON.stringify({
+        name: tourName,
+        data: updatedTourData
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to save tour settings');
+    }
+
+    setTourData(updatedTourData);
+    return updatedTourData;
+  };
+
   useEffect(() => {
     fetchTour();
   }, [tourId]);
@@ -426,11 +508,32 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       const foundLogo = data.clientLogo || data.client_logo || data.tourData?.client_logo || data.tourData?.clientLogo || '';
       setClientLogo(foundLogo);
 
+      // Parse Intro Video settings specifically for this project
+      const foundVideo = data.introVideoUrl || data.tourData?.introVideoUrl || data.tourData?.introVideo?.url || '';
+      const foundVideoTitle = data.introVideoTitle || data.tourData?.introVideoTitle || data.tourData?.introVideo?.title || `${data.name || 'Virtual Tour'} - Overview`;
+      const isVideoEnabled = data.introVideoEnabled !== undefined ? data.introVideoEnabled : (data.tourData?.introVideoEnabled !== undefined ? data.tourData?.introVideoEnabled : true);
+
+      setIntroVideoUrl(foundVideo);
+      setIntroVideoTitle(foundVideoTitle);
+      setIntroVideoEnabled(isVideoEnabled);
+      setVideoFormUrl(foundVideo);
+      setVideoFormTitle(foundVideoTitle);
+      setVideoFormEnabled(isVideoEnabled);
+
+      // Intro Video auto-plays immediately on load and on every refresh for this project
+      if (foundVideo && isVideoEnabled) {
+        setShowIntroVideo(true);
+        setIsExitingIntro(false);
+      }
+
       const locations = data.tourData?.locations || [];
       if (locations.length > 0) {
+        const configuredStartLocId = data.tourData?.startLocationId || data.startLocationId;
         const savedLocId = localStorage.getItem(`active_public_loc_${tourId}`);
         const isValidSavedLoc = savedLocId && locations.some((l: any) => l.id === savedLocId);
-        const targetId = isValidSavedLoc ? savedLocId : locations[0].id;
+        const targetId = (configuredStartLocId && locations.some((l: any) => l.id === configuredStartLocId))
+          ? configuredStartLocId
+          : (isValidSavedLoc ? savedLocId : locations[0].id);
         setActiveLocationId(targetId);
         localStorage.setItem(`active_public_loc_${tourId}`, targetId);
 
@@ -459,6 +562,112 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       setLoading(false);
     }
   };
+
+  const handleEnter360 = () => {
+    setIsExitingIntro(true);
+    setTimeout(() => {
+      setShowIntroVideo(false);
+      setIsExitingIntro(false);
+      setHasWatchedIntro(true);
+      if (introVideoRef.current) {
+        introVideoRef.current.pause();
+      }
+
+      // If a default starting location is configured for the tour, switch to it
+      const startLocId = tourData?.startLocationId;
+      const locationsList = tourData?.locations || [];
+      if (startLocId && locationsList.some((l: any) => l.id === startLocId)) {
+        setActiveLocationId(startLocId);
+        localStorage.setItem(`active_public_loc_${tourId}`, startLocId);
+      }
+
+      // If a saved starting camera angle exists, restore it smoothly
+      const targetLoc = locationsList.find((l: any) => l.id === (startLocId || activeLocationId)) || locationsList[0];
+      const savedCameraView = targetLoc?.initialCameraView || tourData?.initialCameraView;
+      if (savedCameraView && viewer360Ref.current?.setCameraView) {
+        setTimeout(() => {
+          viewer360Ref.current?.setCameraView?.(savedCameraView);
+        }, 120);
+      }
+    }, 650);
+  };
+
+  // Admin action: Save current location and exact camera angle (yaw, pitch, fov) as default starting view
+  const handleSetDefaultStartingView = async () => {
+    if (!isAdmin) {
+      alert('Permission denied: Only administrators can set the default starting view.');
+      return;
+    }
+    if (!viewer360Ref.current?.getCurrentView) {
+      alert('360 view not ready yet.');
+      return;
+    }
+
+    const currentView = viewer360Ref.current.getCurrentView();
+    if (!currentView) {
+      alert('Could not capture current 360 camera angle. Please adjust the view and try again.');
+      return;
+    }
+
+    setIsSavingStartView(true);
+    try {
+      // Save camera angle to current location
+      await saveUpdatedLocationData({
+        initialCameraView: currentView
+      });
+
+      // Also save as the tour's primary default start location & camera angle
+      await saveUpdatedTourData({
+        startLocationId: currentLocation?.id || activeLocationId,
+        initialCameraView: currentView
+      });
+
+      setSaveStartViewSuccess(true);
+      setTimeout(() => setSaveStartViewSuccess(false), 3000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to save default starting view');
+    } finally {
+      setIsSavingStartView(false);
+    }
+  };
+
+  // Delayed Hotspots Entrance: Reveal hotspots with smooth bloom animation exactly 0.5s after 360 view is revealed
+  useEffect(() => {
+    if (showIntroVideo) {
+      setHotspotsEnabled(false);
+    } else {
+      const timer = setTimeout(() => {
+        setHotspotsEnabled(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [showIntroVideo]);
+
+  // Robust HTML5 Video Autoplay Controller (Bypasses browser autoplay restrictions with muted fallback)
+  useEffect(() => {
+    if (showIntroVideo && introVideoUrl) {
+      const embed = getMediaEmbed(introVideoUrl);
+      if (embed.type === 'video' && introVideoRef.current) {
+        const vid = introVideoRef.current;
+        vid.muted = introVideoMuted;
+        const playPromise = vid.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              setIntroVideoPaused(false);
+            })
+            .catch((err) => {
+              console.warn('Initial autoplay prevented, trying with muted stream:', err);
+              vid.muted = true;
+              setIntroVideoMuted(true);
+              vid.play()
+                .then(() => setIntroVideoPaused(false))
+                .catch(() => setIntroVideoPaused(true));
+            });
+        }
+      }
+    }
+  }, [showIntroVideo, introVideoUrl]);
 
   const handleUploadMasterPlanImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isAdmin) {
@@ -1018,6 +1227,106 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
     }
   };
 
+  // Intro Video Handlers
+  const handleUploadIntroVideoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) {
+      alert('Permission denied: Only administrators can upload intro videos.');
+      return;
+    }
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('video/') && !file.name.match(/\.(mp4|webm|mov|m4v|ogg)$/i)) {
+      alert('Please select a valid video file (MP4, WebM, MOV).');
+      return;
+    }
+
+    setIsUploadingIntroVideo(true);
+    try {
+      const token = localStorage.getItem('crm_token') || localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const resData = await uploadFileWithFallback(
+        `${API_BASE_URL}/api/upload`,
+        formData,
+        token ? { Authorization: `Bearer ${token}` } : {}
+      );
+
+      if (resData && resData.url) {
+        setVideoFormUrl(resData.url);
+      }
+    } catch (err: any) {
+      if (!err.message?.includes('cancelled')) {
+        alert(err.message || 'Video upload failed');
+      }
+    } finally {
+      setIsUploadingIntroVideo(false);
+    }
+  };
+
+  const handleSaveIntroVideo = async () => {
+    if (!isAdmin) {
+      alert('Permission denied: Only administrators can configure the intro video.');
+      return;
+    }
+    setIsSavingIntroVideo(true);
+    try {
+      const newVideoUrl = videoFormUrl.trim();
+      const newVideoTitle = videoFormTitle.trim() || `${displayName} - Overview`;
+      const newVideoEnabled = videoFormEnabled;
+
+      await saveUpdatedTourData({
+        introVideoUrl: newVideoUrl,
+        introVideoTitle: newVideoTitle,
+        introVideoEnabled: newVideoEnabled,
+        introVideo: {
+          url: newVideoUrl,
+          title: newVideoTitle,
+          enabled: newVideoEnabled
+        }
+      });
+
+      setIntroVideoUrl(newVideoUrl);
+      setIntroVideoTitle(newVideoTitle);
+      setIntroVideoEnabled(newVideoEnabled);
+      setIsEditingIntroVideo(false);
+      alert('Intro video settings saved successfully!');
+    } catch (err: any) {
+      alert(err.message || 'Could not save intro video settings');
+    } finally {
+      setIsSavingIntroVideo(false);
+    }
+  };
+
+  const handleDeleteIntroVideo = async () => {
+    if (!isAdmin) return;
+    if (!confirm('Are you sure you want to remove the intro video from this tour?')) return;
+    setIsSavingIntroVideo(true);
+    try {
+      await saveUpdatedTourData({
+        introVideoUrl: '',
+        introVideoTitle: '',
+        introVideoEnabled: false,
+        introVideo: null
+      });
+
+      setIntroVideoUrl('');
+      setVideoFormUrl('');
+      setIntroVideoTitle('');
+      setVideoFormTitle('');
+      setIntroVideoEnabled(false);
+      setVideoFormEnabled(false);
+      setIsEditingIntroVideo(false);
+      setShowIntroVideo(false);
+      alert('Intro video removed successfully!');
+    } catch (err: any) {
+      alert(err.message || 'Failed to remove intro video');
+    } finally {
+      setIsSavingIntroVideo(false);
+    }
+  };
+
   const getGeneratedShareUrl = () => {
     return createShareUrl(tourId, shareMinutes);
   };
@@ -1123,52 +1432,78 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   }
 
   if (loading) {
+    const loadingTitle = tourName ? tourName.toUpperCase() : '360° VIRTUAL TOUR';
     return (
-      <div className="public-viewer-page d-flex flex-column align-items-center justify-content-center text-white" style={{ background: '#050713' }}>
-        <div style={{ position: 'relative', width: '80px', height: '80px', marginBottom: '20px' }}>
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.45), rgba(168, 85, 247, 0.45))',
-            filter: 'blur(16px)',
-            animation: 'pulse 2s infinite'
-          }} />
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: '50%',
-            border: '3px solid rgba(99, 102, 241, 0.2)',
-            borderTopColor: '#818cf8',
-            borderRightColor: '#c084fc',
-            animation: 'spin 1.2s linear infinite'
-          }} />
-          <div style={{
-            position: 'absolute',
-            inset: '8px',
-            borderRadius: '50%',
-            background: '#0d122b',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#818cf8',
-            boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.6)'
-          }}>
-            <Compass size={32} className="spin" style={{ animationDuration: '6s' }} />
+      <div className="smart-spatial-loader">
+        {/* Ambient Glowing Orbs */}
+        <div className="smart-loader-ambient-glow-1" />
+        <div className="smart-loader-ambient-glow-2" />
+
+        {/* 3D Gyroscope & Orbital Ring Assembly */}
+        <div className="smart-loader-gyro-stage">
+          <div className="smart-loader-orbit-outer" />
+          <div className="smart-loader-orbit-middle" />
+          <div className="smart-loader-core-orb">
+            <Compass size={38} className="smart-loader-core-icon" />
           </div>
         </div>
-        <h3 style={{
-          fontSize: '1.2rem',
-          fontWeight: 800,
-          background: 'linear-gradient(135deg, #ffffff 40%, #c7d2fe 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          marginBottom: '6px'
-        }}>
-          Loading 360° Virtual Tour
-        </h3>
-        <p className="small text-secondary mt-0 mb-0">Initializing panorama projection & 3D beacons...</p>
+
+        {/* Info & Typography Card */}
+        <div className="smart-loader-content">
+          {clientLogo && (
+            <div
+              style={{
+                height: '42px',
+                maxWidth: '160px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '1rem',
+                background: 'rgba(255, 255, 255, 0.05)',
+                padding: '6px 16px',
+                borderRadius: '12px',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}
+            >
+              <img
+                src={toCloudFrontUrl(clientLogo)}
+                alt="Brand Logo"
+                style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
+              />
+            </div>
+          )}
+
+          <div className="smart-loader-badge">
+            <span className="smart-loader-live-dot" />
+            <span>360° SPATIAL ENGINE</span>
+          </div>
+
+          <h3 className="smart-loader-title">
+            {loadingTitle}
+          </h3>
+
+          <p className="smart-loader-subtitle">
+            Preparing high-definition 360° spatial projection, interactive waypoints & visual models...
+          </p>
+
+          {/* Shimmering Progress Bar */}
+          <div className="smart-loader-progress-box">
+            <div className="smart-loader-progress-bar" />
+          </div>
+
+          {/* Feature Spec Tags */}
+          <div className="smart-loader-features">
+            <div className="smart-loader-tag">
+              <span className="dot">●</span> 4K ULTRA HDR
+            </div>
+            <div className="smart-loader-tag">
+              <span className="dot">●</span> 3D SPATIAL BEACONS
+            </div>
+            <div className="smart-loader-tag">
+              <span className="dot">●</span> SMART CITY GIS
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1319,8 +1654,54 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
   return (
     <div className="public-viewer-page">
+      {/* Seamless 360-Integrated Immersive Intro Layer */}
+      {showIntroVideo && introVideoUrl && (() => {
+        const embed = getMediaEmbed(introVideoUrl);
+        return (
+          <div
+            className={`smart-intro-360-layer ${isExitingIntro ? 'exiting' : ''}`}
+            onClick={handleEnter360}
+          >
+            {/* Background Fullscreen Video or Iframe */}
+            {embed.type === 'video' ? (
+              <video
+                ref={introVideoRef}
+                src={embed.url}
+                className="smart-intro-360-video"
+                autoPlay
+                playsInline
+                preload="auto"
+                muted={introVideoMuted}
+                onPlay={() => setIntroVideoPaused(false)}
+                onPause={() => setIntroVideoPaused(true)}
+                onEnded={handleEnter360}
+              />
+            ) : (
+              <iframe
+                src={embed.url}
+                title="360 Tour Intro Video"
+                className="smart-intro-360-video"
+                style={{ border: 'none', pointerEvents: 'auto' }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Minimal Floating Top Navbar Toggle Icon Button (Only Icon) */}
+      <button
+        type="button"
+        className={`smart-top-nav-toggle-icon-btn ${mobileTopNavOpen ? 'open' : 'collapsed'}`}
+        onClick={() => setMobileTopNavOpen(!mobileTopNavOpen)}
+        title={mobileTopNavOpen ? 'Close Navigation Bar' : 'Open Navigation Bar'}
+      >
+        {mobileTopNavOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+      </button>
+
       {/* Top Glassmorphic Navigation Bar */}
-      <div className="smart-portal-header">
+      <div className={`smart-portal-header ${mobileTopNavOpen ? 'mobile-open' : 'mobile-collapsed'}`}>
         {/* Left Branding & Controls */}
         <div className="smart-portal-brand">
           {/* Back to Dashboard Button (Shifted to Left) */}
@@ -1414,10 +1795,61 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <FolderDown size={14} />
             <span>Downloads</span>
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setActiveNavTab('video')}
+              className={`smart-nav-btn ${activeNavTab === 'video' ? 'active' : ''}`}
+              title="Intro Video Presentation (Admin)"
+            >
+              <Film size={14} />
+              <span>Intro Video</span>
+            </button>
+          )}
         </div>
 
         {/* Right Controls (Right Navbar Toggle, Share, Fullscreen) */}
         <div className="smart-top-right">
+          {/* Admin "Set Default Starting View & Angle" Button */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleSetDefaultStartingView}
+              disabled={isSavingStartView}
+              className="smart-tool-btn"
+              style={{
+                height: '2.25rem',
+                padding: '0 12px',
+                width: 'auto',
+                gap: '6px',
+                borderRadius: '12px',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                background: saveStartViewSuccess
+                  ? 'linear-gradient(135deg, #059669, #10b981)'
+                  : 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))',
+                border: saveStartViewSuccess
+                  ? '1px solid #34d399'
+                  : '1px solid rgba(168, 85, 247, 0.5)',
+                color: '#ffffff',
+                boxShadow: saveStartViewSuccess
+                  ? '0 0 16px rgba(16, 185, 129, 0.5)'
+                  : '0 4px 12px rgba(99, 102, 241, 0.3)',
+                transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                cursor: 'pointer'
+              }}
+              title="Set this current location and camera angle as the default view after intro video"
+            >
+              {isSavingStartView ? (
+                <Loader2 size={13} className="spin" />
+              ) : saveStartViewSuccess ? (
+                <Check size={14} color="#ffffff" />
+              ) : (
+                <Target size={14} color="#c084fc" />
+              )}
+              <span>{isSavingStartView ? 'Saving...' : saveStartViewSuccess ? 'Starting View Saved!' : 'Set Start View'}</span>
+            </button>
+          )}
+
           {/* Right Locations Navbar Open/Close Toggle Button */}
           <button
             onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
@@ -1505,6 +1937,22 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
         {/* Sidebar Feature Links */}
         <div className="smart-sidebar-menu">
+          {/* Intro Video Presentation Link (Admin Only) */}
+          {isAdmin && (
+            <div
+              className="smart-menu-item"
+              onClick={() => setActiveNavTab('video')}
+            >
+              <div className="smart-menu-icon" style={{ background: 'rgba(236, 72, 153, 0.18)', color: '#f472b6' }}>
+                <Film size={15} />
+              </div>
+              <div>
+                <div className="smart-menu-label">INTRO VIDEO</div>
+                <div className="smart-menu-sub">{introVideoUrl ? 'Watch presentation' : 'Upload Video (Admin)'}</div>
+              </div>
+            </div>
+          )}
+
           <div className="smart-menu-item" onClick={() => setActiveNavTab('masterplan')}>
             <div className="smart-menu-icon"><Map size={15} /></div>
             <div>
@@ -1728,7 +2176,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           readOnly={true}
           directions={currentLocation?.directions || { F: [], B: [], L: [], R: [], U: [], D: [] }}
           gridConfigs={currentLocation?.gridConfigs || {}}
-          hotspots={currentLocation?.hotspots || []}
+          hotspots={hotspotsEnabled ? (currentLocation?.hotspots || []) : []}
           stitchedPanoPath={currentLocation?.stitchedPanoPath || currentLocation?.imagePath}
           adjustments={dynamicAdjustments}
           autoRotate={autoRotate}
@@ -1742,111 +2190,124 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           isAdmin={isAdmin}
           galleryPhotos={galleryPhotos}
           locations={locations}
+          initialCameraView={currentLocation?.initialCameraView || (currentLocation?.id === tourData?.startLocationId ? tourData?.initialCameraView : undefined)}
         />
       </div>
 
       {/* Bottom Floating Quick Explore Carousel */}
       {locations.length > 0 && (
-        <div className="smart-bottom-carousel-wrapper">
-          <div className="smart-carousel-title">
-            QUICK EXPLORE
-          </div>
+        <div className={`smart-bottom-carousel-wrapper ${quickExploreOpen ? 'open' : 'collapsed'}`}>
+          {/* Header Bar with Toggle Button (Pure Icon) */}
+          <button
+            type="button"
+            className="smart-carousel-title-btn"
+            onClick={() => {
+              const next = !quickExploreOpen;
+              setQuickExploreOpen(next);
+              localStorage.setItem('tour_quick_explore_open', JSON.stringify(next));
+            }}
+            title={quickExploreOpen ? 'Minimize Quick Explore' : 'Expand Quick Explore'}
+          >
+            {quickExploreOpen ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+          </button>
 
-          <div className="smart-carousel-container">
-            {locations.length > 4 && (
-              <button onClick={() => scrollCarousel('left')} className="smart-carousel-arrow" title="Previous">
-                <ChevronLeft size={16} />
-              </button>
-            )}
+          {quickExploreOpen && (
+            <div className="smart-carousel-container">
+              {locations.length > 4 && (
+                <button onClick={() => scrollCarousel('left')} className="smart-carousel-arrow" title="Previous">
+                  <ChevronLeft size={16} />
+                </button>
+              )}
 
-            <div className="smart-carousel-scroll" ref={carouselScrollRef}>
-              {locations.map((loc: any, idx: number) => {
-                const isActive = loc.id === activeLocationId;
-                const paddedNum = String(idx + 1).padStart(2, '0');
+              <div className="smart-carousel-scroll" ref={carouselScrollRef}>
+                {locations.map((loc: any, idx: number) => {
+                  const isActive = loc.id === activeLocationId;
+                  const paddedNum = String(idx + 1).padStart(2, '0');
 
-                const isUploadingThisThumb = uploadingThumbnailLocId === loc.id;
+                  const isUploadingThisThumb = uploadingThumbnailLocId === loc.id;
 
-                // Determine thumbnail image (custom uploaded thumbnail > stitched pano > direction face)
-                let thumbSrc = '';
-                if (loc.thumbnailPath || loc.thumbnailUrl || loc.thumb) {
-                  const t = loc.thumbnailPath || loc.thumbnailUrl || loc.thumb;
-                  thumbSrc = t.startsWith('http') || t.startsWith('data:')
-                    ? toCloudFrontUrl(t)
-                    : `${API_BASE_URL}${t.startsWith('/') ? '' : '/'}${t}`;
-                } else if (loc.stitchedPanoPath) {
-                  thumbSrc = loc.stitchedPanoPath.startsWith('http') || loc.stitchedPanoPath.startsWith('data:')
-                    ? toCloudFrontUrl(loc.stitchedPanoPath)
-                    : `${API_BASE_URL}${loc.stitchedPanoPath.startsWith('/') ? '' : '/'}${loc.stitchedPanoPath}`;
-                } else if (loc.directions?.F?.[0]?.path) {
-                  const p = loc.directions.F[0].path;
-                  thumbSrc = p.startsWith('http') || p.startsWith('data:')
-                    ? toCloudFrontUrl(p)
-                    : `${API_BASE_URL}${p.startsWith('/') ? '' : '/'}${p}`;
-                }
+                  // Determine thumbnail image (custom uploaded thumbnail > stitched pano > direction face)
+                  let thumbSrc = '';
+                  if (loc.thumbnailPath || loc.thumbnailUrl || loc.thumb) {
+                    const t = loc.thumbnailPath || loc.thumbnailUrl || loc.thumb;
+                    thumbSrc = t.startsWith('http') || t.startsWith('data:')
+                      ? toCloudFrontUrl(t)
+                      : `${API_BASE_URL}${t.startsWith('/') ? '' : '/'}${t}`;
+                  } else if (loc.stitchedPanoPath) {
+                    thumbSrc = loc.stitchedPanoPath.startsWith('http') || loc.stitchedPanoPath.startsWith('data:')
+                      ? toCloudFrontUrl(loc.stitchedPanoPath)
+                      : `${API_BASE_URL}${loc.stitchedPanoPath.startsWith('/') ? '' : '/'}${loc.stitchedPanoPath}`;
+                  } else if (loc.directions?.F?.[0]?.path) {
+                    const p = loc.directions.F[0].path;
+                    thumbSrc = p.startsWith('http') || p.startsWith('data:')
+                      ? toCloudFrontUrl(p)
+                      : `${API_BASE_URL}${p.startsWith('/') ? '' : '/'}${p}`;
+                  }
 
-                return (
-                  <div
-                    key={loc.id}
-                    onClick={() => handleQuickExploreNavigate(loc.id)}
-                    className={`smart-thumb-card ${isActive ? 'active' : ''}`}
-                    title={loc.name}
-                  >
-                    {thumbSrc ? (
-                      <img src={thumbSrc} alt={loc.name} className="smart-thumb-img" />
-                    ) : (
-                      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #1e1b4b, #0f172a)' }} />
-                    )}
+                  return (
+                    <div
+                      key={loc.id}
+                      onClick={() => handleQuickExploreNavigate(loc.id)}
+                      className={`smart-thumb-card ${isActive ? 'active' : ''}`}
+                      title={loc.name}
+                    >
+                      {thumbSrc ? (
+                        <img src={thumbSrc} alt={loc.name} className="smart-thumb-img" />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #1e1b4b, #0f172a)' }} />
+                      )}
 
-                    {/* Admin Upload Thumbnail Button */}
-                    {isAdmin && (
-                      <label
-                        onClick={(e) => e.stopPropagation()}
-                        className="smart-thumb-upload-btn"
-                        title={`Upload custom thumbnail photo for ${loc.name}`}
-                      >
-                        <Camera size={12} />
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleUploadLocationThumbnail(loc.id, e)}
-                          hidden
-                        />
-                      </label>
-                    )}
+                      {/* Admin Upload Thumbnail Button */}
+                      {isAdmin && (
+                        <label
+                          onClick={(e) => e.stopPropagation()}
+                          className="smart-thumb-upload-btn"
+                          title={`Upload custom thumbnail photo for ${loc.name}`}
+                        >
+                          <Camera size={12} />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleUploadLocationThumbnail(loc.id, e)}
+                            hidden
+                          />
+                        </label>
+                      )}
 
-                    {/* Uploading Loading Indicator */}
-                    {isUploadingThisThumb && (
-                      <div style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: 'rgba(0, 0, 0, 0.75)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '4px',
-                        zIndex: 15
-                      }}>
-                        <Loader2 size={16} className="spin" color="#818cf8" />
-                        <span style={{ fontSize: '0.6rem', color: '#cbd5e1' }}>Uploading...</span>
+                      {/* Uploading Loading Indicator */}
+                      {isUploadingThisThumb && (
+                        <div style={{
+                          position: 'absolute',
+                          inset: 0,
+                          background: 'rgba(0, 0, 0, 0.75)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px',
+                          zIndex: 15
+                        }}>
+                          <Loader2 size={16} className="spin" color="#818cf8" />
+                          <span style={{ fontSize: '0.6rem', color: '#cbd5e1' }}>Uploading...</span>
+                        </div>
+                      )}
+
+                      {/* Name pinned to the bottom of the image */}
+                      <div className="smart-thumb-info">
+                        <span className="smart-thumb-name" title={loc.name}>{loc.name}</span>
                       </div>
-                    )}
-
-                    <div className="smart-thumb-info">
-                      <span className="smart-thumb-num">{paddedNum}</span>
-                      <span className="smart-thumb-name">{loc.name}</span>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
 
-            {locations.length > 4 && (
-              <button onClick={() => scrollCarousel('right')} className="smart-carousel-arrow" title="Next">
-                <ChevronRight size={16} />
-              </button>
-            )}
-          </div>
+              {locations.length > 4 && (
+                <button onClick={() => scrollCarousel('right')} className="smart-carousel-arrow" title="Next">
+                  <ChevronRight size={16} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -2150,6 +2611,409 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           <span className="smart-compass-n">N</span>
         </div>
       </div>
+
+      {/* 0. INTRO VIDEO PRESENTATION & MANAGEMENT MODAL */}
+      {activeNavTab === 'video' && (
+        <div className="smart-content-overlay" onClick={() => { if (!isEditingIntroVideo) setActiveNavTab('overview'); }}>
+          <div className="smart-content-modal" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="smart-content-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'rgba(236, 72, 153, 0.18)',
+                  border: '1px solid rgba(236, 72, 153, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#f472b6'
+                }}>
+                  <Film size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '0.02em' }}>
+                    {introVideoTitle || `${displayName} - Project Presentation`}
+                  </h3>
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+                    Cinematic overview video playing when visitors first load this 360 tour
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {isAdmin && (
+                  <button
+                    onClick={() => setIsEditingIntroVideo(!isEditingIntroVideo)}
+                    style={{
+                      background: isEditingIntroVideo ? 'rgba(239, 68, 68, 0.2)' : 'rgba(99, 102, 241, 0.25)',
+                      border: `1px solid ${isEditingIntroVideo ? 'rgba(239, 68, 68, 0.5)' : 'rgba(99, 102, 241, 0.5)'}`,
+                      color: isEditingIntroVideo ? '#fca5a5' : '#c7d2fe',
+                      padding: '6px 14px',
+                      borderRadius: '10px',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Edit3 size={14} />
+                    <span>{isEditingIntroVideo ? 'Cancel Edit' : 'Edit Video Settings'}</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingIntroVideo(false);
+                    setActiveNavTab('overview');
+                  }}
+                  className="smart-close-btn"
+                  title="Close Video Modal"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="smart-content-modal-body">
+              {isEditingIntroVideo && isAdmin ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                  {/* Video Title & Enabled Switch */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Presentation Video Title
+                      </label>
+                      <input
+                        type="text"
+                        value={videoFormTitle}
+                        onChange={(e) => setVideoFormTitle(e.target.value)}
+                        placeholder="e.g. Master Vision & Smart City Walkthrough"
+                        style={{
+                          width: '100%',
+                          background: '#070913',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          borderRadius: '10px',
+                          padding: '10px 14px',
+                          color: '#ffffff',
+                          fontSize: '0.9rem',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Autoplay on First Load
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setVideoFormEnabled(!videoFormEnabled)}
+                        style={{
+                          width: '100%',
+                          height: '42px',
+                          borderRadius: '10px',
+                          background: videoFormEnabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                          border: `1px solid ${videoFormEnabled ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'}`,
+                          color: videoFormEnabled ? '#34d399' : '#f87171',
+                          fontWeight: 700,
+                          fontSize: '0.85rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        {videoFormEnabled ? <Check size={16} /> : <X size={16} />}
+                        <span>{videoFormEnabled ? 'Enabled' : 'Disabled'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Upload MP4 / WebM File Dropzone */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Upload Video File (MP4 / WebM / MOV)
+                    </label>
+                    <label style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '24px',
+                      background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(236, 72, 153, 0.08))',
+                      border: '2px dashed rgba(99, 102, 241, 0.4)',
+                      borderRadius: '14px',
+                      cursor: isUploadingIntroVideo ? 'wait' : 'pointer',
+                      transition: 'all 0.2s',
+                      textAlign: 'center'
+                    }}>
+                      {isUploadingIntroVideo ? (
+                        <>
+                          <Loader2 size={32} className="animate-spin text-indigo-400" style={{ marginBottom: '10px' }} />
+                          <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#ffffff' }}>Uploading video to cloud storage...</span>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px' }}>Please wait while the video processes</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload size={30} className="text-indigo-400" style={{ marginBottom: '10px' }} />
+                          <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#ffffff' }}>Click to select and upload video file</span>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px' }}>Supports MP4, WebM, and MOV video formats</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="video/mp4,video/webm,video/quicktime,video/*"
+                        onChange={handleUploadIntroVideoFile}
+                        disabled={isUploadingIntroVideo}
+                        hidden
+                      />
+                    </label>
+                  </div>
+
+                  {/* Or Direct Video URL Input */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Or Direct Video URL / CDN Link
+                    </label>
+                    <input
+                      type="url"
+                      value={videoFormUrl}
+                      onChange={(e) => setVideoFormUrl(e.target.value)}
+                      placeholder="https://your-domain.com/video.mp4"
+                      style={{
+                        width: '100%',
+                        background: '#070913',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        borderRadius: '10px',
+                        padding: '10px 14px',
+                        color: '#ffffff',
+                        fontSize: '0.9rem',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  {/* Video Preview if URL present */}
+                  {videoFormUrl && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Video Live Preview
+                      </label>
+                      <div style={{
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        background: '#000000',
+                        maxHeight: '320px',
+                        border: '1px solid rgba(255,255,255,0.15)'
+                      }}>
+                        <video
+                          src={toCloudFrontUrl(videoFormUrl)}
+                          controls
+                          style={{ width: '100%', maxHeight: '320px', objectFit: 'contain' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                    {introVideoUrl ? (
+                      <button
+                        type="button"
+                        onClick={handleDeleteIntroVideo}
+                        disabled={isSavingIntroVideo}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.18)',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          color: '#f87171',
+                          padding: '10px 18px',
+                          borderRadius: '10px',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <Trash2 size={15} />
+                        <span>Remove Video</span>
+                      </button>
+                    ) : <div />}
+
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingIntroVideo(false)}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          color: '#cbd5e1',
+                          borderRadius: '10px',
+                          padding: '10px 18px',
+                          fontSize: '0.82rem',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveIntroVideo}
+                        disabled={isSavingIntroVideo || isUploadingIntroVideo}
+                        style={{
+                          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                          border: 'none',
+                          color: '#ffffff',
+                          borderRadius: '10px',
+                          padding: '10px 22px',
+                          fontSize: '0.85rem',
+                          fontWeight: 700,
+                          cursor: (isSavingIntroVideo || isUploadingIntroVideo) ? 'wait' : 'pointer',
+                          boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        {isSavingIntroVideo ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                        <span>{isSavingIntroVideo ? 'Saving...' : 'Save Video Settings'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Regular / Visitor Video View */
+                <div>
+                  {introVideoUrl ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div style={{
+                        borderRadius: '14px',
+                        overflow: 'hidden',
+                        background: '#000000',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        boxShadow: '0 15px 40px rgba(0,0,0,0.8)'
+                      }}>
+                        <video
+                          src={toCloudFrontUrl(introVideoUrl)}
+                          controls
+                          autoPlay
+                          playsInline
+                          style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#ffffff' }}>
+                            {introVideoTitle || `${displayName} - Project Presentation`}
+                          </h4>
+                          <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                            High-definition presentation overview for {displayName}
+                          </p>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setShowIntroVideo(true)}
+                            style={{
+                              background: 'rgba(255, 255, 255, 0.08)',
+                              border: '1px solid rgba(255, 255, 255, 0.18)',
+                              color: '#ffffff',
+                              padding: '10px 18px',
+                              borderRadius: '10px',
+                              fontSize: '0.82rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <Maximize2 size={15} />
+                            <span>Fullscreen Intro Mode</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveNavTab('overview')}
+                            style={{
+                              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                              border: 'none',
+                              color: '#ffffff',
+                              padding: '10px 22px',
+                              borderRadius: '10px',
+                              fontSize: '0.85rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)'
+                            }}
+                          >
+                            <span>Explore 360 View</span>
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      padding: '50px 20px',
+                      textAlign: 'center',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      borderRadius: '14px',
+                      border: '1px dashed rgba(255, 255, 255, 0.1)'
+                    }}>
+                      <Film size={40} className="text-gray-500 mx-auto" style={{ marginBottom: '12px' }} />
+                      <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', margin: '0 0 6px 0' }}>
+                        No Intro Video Configured
+                      </h4>
+                      <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0 0 16px 0' }}>
+                        {isAdmin
+                          ? 'Upload an MP4 / WebM presentation video to play when visitors first open this 360 tour.'
+                          : 'An introductory video has not been uploaded for this tour yet.'}
+                      </p>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingIntroVideo(true)}
+                          style={{
+                            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                            border: 'none',
+                            color: '#ffffff',
+                            padding: '10px 20px',
+                            borderRadius: '10px',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)'
+                          }}
+                        >
+                          <Upload size={15} />
+                          <span>Upload Intro Video Now</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 1. MASTER PLAN MODAL OVERLAY */}
       {activeNavTab === 'masterplan' && (

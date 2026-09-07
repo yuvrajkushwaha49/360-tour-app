@@ -1267,7 +1267,7 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
           }
           return true;
         })
-        .map(h => {
+        .map((h, idx) => {
           const hasPolygon = h.polygonPoints && h.polygonPoints.length > 1;
           const hasDetails = Boolean(h.area || h.description || h.subtitle || h.targetLocationId || (galleryPhotos && galleryPhotos.length > 0));
           const isOpen = activeInfoId === h.id;
@@ -1388,8 +1388,10 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                         flexDirection: 'column',
                         alignItems: 'center',
                         transform: 'translateY(-50%) translateY(8px)',
-                        pointerEvents: 'auto'
+                        pointerEvents: 'auto',
+                        animation: `hotspotBloomIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) ${idx * 0.08 + 0.25}s both`
                       }}
+                      className="smart-hotspot-item-wrapper"
                       onMouseEnter={() => { if (contextMenuId !== h.id) setActiveInfoId(h.id); }}
                       onMouseLeave={() => { setActiveInfoId(null); }}
                     >
@@ -1593,8 +1595,10 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                           height: '28px',
                           background: `linear-gradient(to bottom, ${h.beaconColor || '#a5b4fc'}, rgba(255, 255, 255, 0.95), ${h.beaconColor || '#6366f1'})`,
                           boxShadow: `0 0 8px ${h.beaconColor || '#6366f1'}, 0 0 2px #ffffff`,
-                          position: 'relative'
+                          position: 'relative',
+                          animation: `hotspotLaserPinGrow 0.65s cubic-bezier(0.16, 1, 0.3, 1) ${idx * 0.08 + 0.35}s both`
                         }}
+                        className="smart-hotspot-laser-pin"
                       />
 
                       {/* 3. High-Tech Concentric Ground Beacon Ring on Terrain */}
@@ -1612,8 +1616,10 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          marginTop: '-1px'
+                          marginTop: '-1px',
+                          animation: `hotspotGroundBeaconPulse 0.7s cubic-bezier(0.16, 1, 0.3, 1) ${idx * 0.08 + 0.4}s both`
                         }}
+                        className="smart-hotspot-ground-beacon"
                       >
                         {/* Ground Laser Anchor Core Spark */}
                         <div
@@ -1706,6 +1712,14 @@ interface Viewer360Props {
   onImageNotFound?: () => void;
   galleryPhotos?: string[];
   locations?: any[];
+  initialCameraView?: CameraViewState;
+}
+
+export interface CameraViewState {
+  cameraPosition: [number, number, number];
+  target?: [number, number, number];
+  fov?: number;
+  groupRotationY?: number;
 }
 
 export interface Viewer360Ref {
@@ -1715,6 +1729,8 @@ export interface Viewer360Ref {
   handleZoomIn: () => void;
   handleZoomOut: () => void;
   resetNorth: () => void;
+  getCurrentView: () => CameraViewState | null;
+  setCameraView: (view: CameraViewState) => void;
 }
 
 const CanvasZoomHandler: React.FC = () => {
@@ -1853,7 +1869,8 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
   onOpenAdjustments = () => { },
   onImageNotFound = () => { },
   galleryPhotos = [],
-  locations = []
+  locations = [],
+  initialCameraView
 }, ref) => {
   const [autoRotate, setAutoRotate] = useState(propAutoRotate);
 
@@ -1996,14 +2013,49 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
     }
   }, []);
 
+  const getCurrentView = useCallback((): CameraViewState | null => {
+    if (controlsRef.current) {
+      const camera = controlsRef.current.object as THREE.PerspectiveCamera;
+      const target = controlsRef.current.target;
+      return {
+        cameraPosition: [camera.position.x, camera.position.y, camera.position.z],
+        target: [target.x, target.y, target.z],
+        fov: camera.fov || 75
+      };
+    }
+    return null;
+  }, []);
+
+  const setCameraView = useCallback((view: CameraViewState) => {
+    if (controlsRef.current && view) {
+      const camera = controlsRef.current.object as THREE.PerspectiveCamera;
+      if (view.cameraPosition) {
+        camera.position.set(view.cameraPosition[0], view.cameraPosition[1], view.cameraPosition[2]);
+      }
+      if (view.target) {
+        controlsRef.current.target.set(view.target[0], view.target[1], view.target[2]);
+      } else {
+        controlsRef.current.target.set(0, 0, 0);
+      }
+      if (view.fov && camera.fov) {
+        camera.fov = view.fov;
+        camera.updateProjectionMatrix();
+      }
+      camera.lookAt(controlsRef.current.target);
+      controlsRef.current.update();
+    }
+  }, []);
+
   React.useImperativeHandle(ref, () => ({
     navigateToLocation,
     zoomIn: handleZoomIn,
     zoomOut: handleZoomOut,
     handleZoomIn,
     handleZoomOut,
-    resetNorth
-  }), [navigateToLocation, handleZoomIn, handleZoomOut, resetNorth]);
+    resetNorth,
+    getCurrentView,
+    setCameraView
+  }), [navigateToLocation, handleZoomIn, handleZoomOut, resetNorth, getCurrentView, setCameraView]);
 
   const handleNavigateWithZoom = (targetId: string, hotspotPos?: [number, number, number]) => {
     navigateToLocation(targetId, hotspotPos);
@@ -2119,16 +2171,39 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
     return () => clearInterval(timer);
   }, [imageMissingError, onImageNotFound]);
 
-  // Reset camera view towards FRONT face (+Z) whenever switching rooms/locations
+  // Reset camera view towards saved initialCameraView or default FRONT face whenever switching rooms/locations
   React.useEffect(() => {
     if (controlsRef.current) {
-      const camera = controlsRef.current.object;
-      camera.position.set(0, 0, -0.01);
-      controlsRef.current.target.set(0, 0, 0);
-      camera.lookAt(0, 0, 0);
-      controlsRef.current.update();
+      const camera = controlsRef.current.object as THREE.PerspectiveCamera;
+      if (initialCameraView && initialCameraView.cameraPosition) {
+        camera.position.set(
+          initialCameraView.cameraPosition[0],
+          initialCameraView.cameraPosition[1],
+          initialCameraView.cameraPosition[2]
+        );
+        if (initialCameraView.target) {
+          controlsRef.current.target.set(
+            initialCameraView.target[0],
+            initialCameraView.target[1],
+            initialCameraView.target[2]
+          );
+        } else {
+          controlsRef.current.target.set(0, 0, 0);
+        }
+        if (initialCameraView.fov && camera.fov) {
+          camera.fov = initialCameraView.fov;
+          camera.updateProjectionMatrix();
+        }
+        camera.lookAt(controlsRef.current.target);
+        controlsRef.current.update();
+      } else {
+        camera.position.set(0, 0, -0.01);
+        controlsRef.current.target.set(0, 0, 0);
+        camera.lookAt(0, 0, 0);
+        controlsRef.current.update();
+      }
     }
-  }, [directions, stitchedPanoPath]);
+  }, [directions, stitchedPanoPath, initialCameraView]);
 
   const toggleFullscreen = () => {
     const element = document.getElementById('interactive-workspace-wrapper');
