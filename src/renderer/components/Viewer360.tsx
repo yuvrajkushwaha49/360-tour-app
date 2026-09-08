@@ -1808,7 +1808,12 @@ const CanvasZoomHandler: React.FC = () => {
   return null;
 };
 
-const CameraZoomEffect: React.FC<{ isZooming: boolean; targetPos: [number, number, number] | null; controlsRef: any }> = ({ isZooming, targetPos, controlsRef }) => {
+const CameraZoomEffect: React.FC<{
+  isZooming: boolean;
+  targetPos: [number, number, number] | null;
+  controlsRef: any;
+  sceneGroupRef?: React.RefObject<THREE.Group>;
+}> = ({ isZooming, targetPos, controlsRef, sceneGroupRef }) => {
   const wasZooming = useRef(false);
   const restoreFrames = useRef(0);
 
@@ -1818,23 +1823,33 @@ const CameraZoomEffect: React.FC<{ isZooming: boolean; targetPos: [number, numbe
       if (isZooming) {
         wasZooming.current = true;
         restoreFrames.current = 0;
-        // Mild, gentle cinematic zoom towards hotspot
-        pCam.fov = THREE.MathUtils.lerp(pCam.fov, 58, 0.035);
+
+        // 1. Smoothly and gently zoom FOV in towards the hotspot
+        pCam.fov = THREE.MathUtils.lerp(pCam.fov, 50, 0.035);
         pCam.updateProjectionMatrix();
 
+        // 2. Smoothly and gracefully glide camera around center to face hotspot
         if (targetPos && controlsRef.current) {
-          const pinVec = new THREE.Vector3(targetPos[0], targetPos[1], targetPos[2]).normalize();
-          const cameraPos = camera.position.clone();
-          const desiredTarget = cameraPos.clone().add(pinVec.multiplyScalar(100));
-          controlsRef.current.target.lerp(desiredTarget, 0.045);
-          controlsRef.current.update();
+          const hotspotVec = new THREE.Vector3(targetPos[0], targetPos[1], targetPos[2]);
+          if (sceneGroupRef?.current) {
+            hotspotVec.applyEuler(sceneGroupRef.current.rotation);
+          }
+          const pinVec = hotspotVec.normalize();
+          if (pinVec.lengthSq() > 0.001) {
+            const desiredCamPos = pinVec.multiplyScalar(-0.01);
+            pCam.position.lerp(desiredCamPos, 0.045);
+            pCam.position.setLength(0.01);
+            controlsRef.current.target.set(0, 0, 0);
+            pCam.lookAt(0, 0, 0);
+            controlsRef.current.update();
+          }
         }
       } else if (wasZooming.current) {
-        // Smoothly restore default FOV right after room navigation finishes
+        // Smoothly and gradually restore default FOV right after room navigation finishes
         restoreFrames.current += 1;
-        pCam.fov = THREE.MathUtils.lerp(pCam.fov, 75, 0.08);
+        pCam.fov = THREE.MathUtils.lerp(pCam.fov, 75, 0.05);
         pCam.updateProjectionMatrix();
-        if (Math.abs(pCam.fov - 75) < 0.5 || restoreFrames.current > 35) {
+        if (Math.abs(pCam.fov - 75) < 0.4 || restoreFrames.current > 45) {
           pCam.fov = 75;
           pCam.updateProjectionMatrix();
           wasZooming.current = false;
@@ -1926,7 +1941,6 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
   const [imageMissingError, setImageMissingError] = useState<boolean>(false);
   const [countdown, setCountdown] = useState<number>(4);
   const [isZooming, setIsZooming] = useState(false);
-  const [isBlurring, setIsBlurring] = useState(false);
   const [zoomTargetPos, setZoomTargetPos] = useState<[number, number, number] | null>(null);
   const controlsRef = useRef<any>(null);
   const sceneGroupRef = useRef<THREE.Group>(null);
@@ -1980,26 +1994,32 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
 
     let isPreloadComplete = false;
     let isMinLookAtComplete = false;
+    let hasSwitched = false;
 
     const executeFinalSwitch = () => {
+      if (hasSwitched) return;
       if (isPreloadComplete && isMinLookAtComplete) {
-        setIsBlurring(true);
+        hasSwitched = true;
+        onNavigate(targetId);
         setTimeout(() => {
-          onNavigate(targetId);
-          setTimeout(() => {
-            setIsBlurring(false);
-            setIsZooming(false);
-            setZoomTargetPos(null);
-          }, 300);
-        }, 200);
+          setIsZooming(false);
+          setZoomTargetPos(null);
+        }, 350);
       }
     };
 
-    // Minimum camera lookAt animation time (650ms for smooth visual sweep towards hotspot)
+    // Minimum camera slide & zoom sweep duration (850ms for graceful, smooth feel)
     setTimeout(() => {
       isMinLookAtComplete = true;
       executeFinalSwitch();
-    }, 650);
+    }, 850);
+
+    // Safeguard timeout (max 1600ms) to ensure transition completes even on slow networks
+    setTimeout(() => {
+      isPreloadComplete = true;
+      isMinLookAtComplete = true;
+      executeFinalSwitch();
+    }, 1600);
 
     if (preloadUrls.length === 0) {
       isPreloadComplete = true;
@@ -2110,7 +2130,8 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
   }), [navigateToLocation, handleZoomIn, handleZoomOut, resetNorth, getCurrentView, setCameraView]);
 
   const handleNavigateWithZoom = (targetId: string, hotspotPos?: [number, number, number]) => {
-    navigateToLocation(targetId, hotspotPos);
+    const targetLoc = locations.find((l: any) => l.id === targetId);
+    navigateToLocation(targetId, hotspotPos, targetLoc);
   };
 
   const [isPreloading, setIsPreloading] = useState<boolean>(true);
@@ -2280,13 +2301,7 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
         overflow: 'hidden'
       }}
     >
-      {/* Soft Light VR Blur Transition Overlay */}
-      <div
-        className={`absolute inset-0 z-40 bg-black/10 pointer-events-none transition-all duration-300 ${isBlurring ? 'opacity-100 backdrop-blur-[1px]' : 'opacity-0 backdrop-blur-none'
-          }`}
-      />
-
-      {/* 360 Panorama Texture Loading & Blur Overlay */}
+      {/* 360 Panorama Texture Loading & Overlay */}
       <div
         style={{
           position: 'absolute',
@@ -2453,7 +2468,7 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
       <Canvas camera={{ position: initialCameraView?.cameraPosition || [0, 0, -0.01], fov: initialCameraView?.fov || 75 }}>
         <CanvasZoomHandler />
         <CameraInitHandler initialCameraView={initialCameraView} controlsRef={controlsRef} sceneGroupRef={sceneGroupRef} />
-        <CameraZoomEffect isZooming={isZooming} targetPos={zoomTargetPos} controlsRef={controlsRef} />
+        <CameraZoomEffect isZooming={isZooming} targetPos={zoomTargetPos} controlsRef={controlsRef} sceneGroupRef={sceneGroupRef} />
         <ambientLight intensity={1.5} />
         <SceneGroup
           adjustments={adjustments}

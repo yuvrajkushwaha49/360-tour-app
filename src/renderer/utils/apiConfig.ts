@@ -1,16 +1,19 @@
 // Live AWS Server IP
 export const AWS_SERVER_URL = 'http://35.154.65.44';
 
-// Dynamic API Base URL resolver: connects to AWS live server from both cloud and localhost
 export function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    // When running directly on the AWS web server domain/IP, use relative URL (Nginx handles proxying)
-    if (hostname === '35.154.65.44' || (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && !window.location.protocol.startsWith('file'))) {
+    const port = window.location.port;
+    // When running in dev mode on localhost or local Wi-Fi network (port 5173 or LAN IP), connect to AWS backend
+    if (port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.startsWith('172.')) {
+      return AWS_SERVER_URL;
+    }
+    // When running in production on AWS server (port 80/443), use relative URL handled by Nginx
+    if (hostname === '35.154.65.44') {
       return '';
     }
   }
-  // When running on localhost (Local PC / Electron / Vite Dev Server), connect to live AWS database & API
   return AWS_SERVER_URL;
 }
 

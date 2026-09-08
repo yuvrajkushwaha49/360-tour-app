@@ -209,7 +209,7 @@
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   height: 100%;
-  justify-content: space-around;
+  justify-content: flex-start;
   padding: 1.15rem 1rem;
   display: flex;
   flex-direction: column;
@@ -309,8 +309,7 @@
     box-shadow 0.25s ease;
 }
 
-/* Absolute positioned close button on top-right corners */
-.smart-portal-right-sidebar .smart-close-btn,
+/* Absolute positioned close button on modals/overlays if needed */
 .smart-close-btn.smart-close-btn-abs {
   position: absolute;
   top: 14px;
@@ -484,24 +483,40 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.35rem;
+  gap: 0.5rem;
   height: 2.35rem;
-  border-radius: 50%;
+  padding: 0 1rem;
+  border-radius: 9999px;
   color: #ffffff;
-  background: rgba(9, 13, 24, 0);
-  border: none;
+  background: rgba(9, 13, 24, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(99, 102, 241, 0.45);
   cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75), 0 0 14px rgba(99, 102, 241, 0.35);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
-  padding: 0;
-  pointer-events: auto;
+  pointer-events: auto !important;
+  z-index: 130;
+}
+
+.smart-carousel-title-text {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #f8fafc;
+  text-transform: uppercase;
 }
 
 .smart-carousel-title-btn:hover {
-  background: rgba(18, 24, 46, 0);
+  background: rgba(18, 24, 46, 0.95);
+  border-color: rgba(168, 85, 247, 0.7);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.85), 0 0 18px rgba(168, 85, 247, 0.5);
+  transform: scale(1.05);
 }
 
 .smart-carousel-title-btn:active {
-  transform: scale(0.92);
+  transform: scale(0.95);
 }
 
 .smart-carousel-container {
@@ -516,6 +531,8 @@
   padding: 0.65rem;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
   animation: carouselFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  pointer-events: auto !important;
+  z-index: 120;
 }
 
 @keyframes carouselFadeIn {
@@ -1404,61 +1421,65 @@
 
 @media (max-width: 768px) {
 
-  /* Minimal Floating Top Toggle Button (Only Icon) */
-  /* Minimal Floating Top Toggle Button (Only Icon - Positioned Below Navbar) */
+  /* Minimal Floating Top Toggle Button (Clean Minimalist Chevron at Top Center) */
   .smart-top-nav-toggle-icon-btn {
     display: flex !important;
     position: fixed;
     left: 50%;
     transform: translateX(-50%);
-    width: 2.35rem;
-    height: 2.35rem;
-    border-radius: 50%;
-    background: rgba(9, 13, 24, 0);
-    border: none;
-    color: #ffffff;
+    width: 2.2rem;
+    height: 1.5rem;
+    border-radius: 4px;
+    background: transparent !important;
+    border: none !important;
+    color: #ffffff !important;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    z-index: 135;
+    z-index: 140;
+    box-shadow: none !important;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.9));
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease !important;
     padding: 0;
   }
 
   .smart-top-nav-toggle-icon-btn.open {
-    top: -0.75rem !important;
+    top: 0.15rem !important;
   }
 
   .smart-top-nav-toggle-icon-btn.collapsed {
-    top: -0.25rem !important;
+    top: 0.4rem !important;
   }
 
-  .smart-top-nav-toggle-icon-btn:hover {}
+  .smart-top-nav-toggle-icon-btn:hover {
+    transform: translateX(-50%) scale(1.18);
+    color: #a5b4fc !important;
+  }
 
   .smart-top-nav-toggle-icon-btn:active {
-    transform: translateX(-50%) scale(0.92);
+    transform: translateX(-50%) scale(0.9);
   }
 
-  /* Top Glassmorphic Navigation Bar on Mobile */
+  /* Top Glassmorphic Navigation Bar on Mobile - Full Rounded Pill (Image 1 Style) */
   .smart-portal-header {
     position: fixed !important;
-    top: 0.75rem !important;
+    top: 1.15rem !important;
     left: 0.75rem !important;
     right: 0.75rem !important;
     width: auto !important;
     height: 3.4rem !important;
-    padding: 0 0.75rem !important;
-    border-radius: 1rem !important;
+    padding: 0 0.65rem !important;
+    border-radius: 9999px !important;
     display: flex !important;
     flex-direction: row !important;
     align-items: center !important;
     justify-content: space-between !important;
-    gap: 8px !important;
-    background: rgba(9, 13, 24, 0.9) !important;
+    background: #0d1222 !important;
     backdrop-filter: blur(20px) !important;
     -webkit-backdrop-filter: blur(20px) !important;
-    border: 1px solid rgba(99, 102, 241, 0.35) !important;
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(99, 102, 241, 0.2) !important;
-    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.85), 0 0 20px rgba(0, 0, 0, 0.5) !important;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease !important;
     z-index: 125 !important;
   }
 
@@ -1479,12 +1500,25 @@
   .smart-portal-header .smart-portal-brand {
     display: flex !important;
     align-items: center !important;
-    gap: 0.5rem !important;
-    flex: 0 0 auto !important;
-    width: auto !important;
+    gap: 0.45rem !important;
+    flex: 1 1 auto !important;
   }
 
-  /* Center category pills hidden on mobile - all options accessible via left sidebar */
+  .smart-portal-header .smart-portal-logo {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 1 1 auto !important;
+    margin: 0 0.25rem !important;
+  }
+
+  .smart-portal-header .smart-portal-logo img {
+    max-height: 28px !important;
+    max-width: 130px !important;
+    object-fit: contain !important;
+  }
+
+  /* Center category pills hidden on mobile */
   .smart-portal-header .smart-nav-pills {
     display: none !important;
   }
@@ -1498,21 +1532,66 @@
   }
 
   .smart-portal-header .smart-tool-btn {
-    width: 2.15rem !important;
-    height: 2.15rem !important;
+    width: 2.35rem !important;
+    height: 2.35rem !important;
+    border-radius: 50% !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    color: #ffffff !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+  }
+
+  .smart-portal-header .smart-desktop-only-btn {
+    display: none !important;
   }
 
   /* Quick Explore Bottom Carousel on Mobile */
   .smart-bottom-carousel-wrapper {
     left: 50% !important;
     transform: translateX(-50%) !important;
-    bottom: 0.75rem !important;
+    bottom: 3.85rem !important;
     width: auto !important;
     max-width: 96vw !important;
+    z-index: 130 !important;
+    pointer-events: none !important;
   }
 
   .smart-bottom-carousel-wrapper.collapsed {
-    bottom: -0.75rem !important;
+    bottom: 3.85rem !important;
+  }
+
+  .smart-carousel-title-text {
+    display: none !important;
+  }
+
+  .smart-carousel-title-btn {
+    width: 2.2rem !important;
+    height: 1.5rem !important;
+    padding: 0 !important;
+    border-radius: 4px !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    color: #ffffff !important;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.9)) !important;
+  }
+
+  .smart-carousel-title-btn:hover {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    transform: scale(1.18) !important;
+    color: #a5b4fc !important;
+  }
+
+  .smart-carousel-title-btn:active {
+    transform: scale(0.9) !important;
   }
 
   .smart-carousel-container {
@@ -1563,7 +1642,7 @@
   }
 
   .smart-compass-widget {
-    bottom: 4.5rem !important;
+    bottom: 8.5rem !important;
     right: 0.85rem !important;
     gap: 0.45rem !important;
   }

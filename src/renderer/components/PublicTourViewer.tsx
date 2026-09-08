@@ -218,9 +218,6 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [introVideoMuted, setIntroVideoMuted] = useState<boolean>(true);
   const [introVideoPaused, setIntroVideoPaused] = useState<boolean>(false);
   const [isExitingIntro, setIsExitingIntro] = useState<boolean>(false);
-  const [introVideoProgress, setIntroVideoProgress] = useState<number>(0);
-  const [introVideoDuration, setIntroVideoDuration] = useState<number>(0);
-  const [introVideoCurrentTime, setIntroVideoCurrentTime] = useState<number>(0);
   const [hotspotsEnabled, setHotspotsEnabled] = useState<boolean>(false);
   const introVideoRef = useRef<HTMLVideoElement>(null);
 
@@ -239,7 +236,14 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   const [activeNavTab, setActiveNavTab] = useState<string>('overview');
   const [timeOfDay, setTimeOfDay] = useState<'day' | 'sunset' | 'night'>('day');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
-  const [quickExploreOpen, setQuickExploreOpen] = useState<boolean>(false);
+  const [quickExploreOpen, setQuickExploreOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('tour_quick_explore_open');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
   const [mobileTopNavOpen, setMobileTopNavOpen] = useState<boolean>(true);
   const [autoRotate, setAutoRotate] = useState<boolean>(() => {
     try {
@@ -337,15 +341,28 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
   const handleQuickExploreNavigate = (locId: string) => {
     if (locId === activeLocationId) return;
-    const locationsList = tourData?.locations || [];
+    const locationsList = tourData?.locations || locations || [];
     const targetLoc = locationsList.find((l: any) => l.id === locId);
     if (!targetLoc) return;
 
     const currentLoc = locationsList.find((l: any) => l.id === activeLocationId) || locationsList[0];
+    const currentIndex = locationsList.findIndex((l: any) => l.id === activeLocationId);
+    const targetIndex = locationsList.findIndex((l: any) => l.id === locId);
+
+    // 1. Check if there is an in-scene hotspot pointing directly to target location
+    let targetSlidePos: [number, number, number] | undefined = undefined;
     const matchingHotspot = currentLoc?.hotspots?.find((h: any) => h.targetLocationId === locId);
 
+    if (matchingHotspot?.position) {
+      targetSlidePos = matchingHotspot.position;
+    } else {
+      // 3D slide direction based on carousel navigation (smooth pan towards target side)
+      const isForwardOrRight = targetIndex >= currentIndex;
+      targetSlidePos = [isForwardOrRight ? 45 : -45, 0, -60];
+    }
+
     if (viewer360Ref.current?.navigateToLocation) {
-      viewer360Ref.current.navigateToLocation(locId, matchingHotspot?.position, targetLoc);
+      viewer360Ref.current.navigateToLocation(locId, targetSlidePos, targetLoc);
     } else {
       handleLocationChange(locId);
     }
@@ -1818,7 +1835,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
               type="button"
               onClick={handleSetDefaultStartingView}
               disabled={isSavingStartView}
-              className="smart-tool-btn"
+              className="smart-tool-btn smart-desktop-only-btn"
               style={{
                 height: '2.25rem',
                 padding: '0 12px',
@@ -1872,7 +1889,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           {isAdmin && (
             <button
               onClick={copyShareLink}
-              className="smart-tool-btn"
+              className="smart-tool-btn smart-desktop-only-btn"
               style={{ width: '2.25rem', height: '2.25rem' }}
               title="Share Tour (Set Active Duration)"
             >
@@ -1917,8 +1934,26 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
 
       {/* Left Collapsible Glassmorphic Sidebar (Fixed to Left Side) */}
       <div className={`smart-portal-sidebar ${sidebarOpen ? 'open' : 'collapsed'}`}>
-        <div className="smart-sidebar-title">
-          EXPLORE {displayName.toUpperCase()}
+        {/* Header with Title and Close Button */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingBottom: '8px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          marginBottom: '4px'
+        }}>
+          <div className="smart-sidebar-title" style={{ margin: 0, paddingLeft: 0 }}>
+            EXPLORE {displayName.toUpperCase()}
+          </div>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="smart-close-btn"
+            title="Close Menu"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* 360 Aerial View CTA Card */}
@@ -2040,45 +2075,42 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          paddingBottom: '12px',
+          paddingBottom: '10px',
           borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
           marginBottom: '12px'
         }}>
-          <div className="smart-cta-card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{
-                width: '28px',
-                height: '28px',
-                borderRadius: '8px',
-                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))',
-                border: '1px solid rgba(99, 102, 241, 0.45)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#a5b4fc'
-              }}>
-                <Compass size={15} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '8px',
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))',
+              border: '1px solid rgba(99, 102, 241, 0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#a5b4fc'
+            }}>
+              <Compass size={15} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.04em' }}>
+                ALL LOCATIONS
               </div>
-              <div>
-                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.04em' }}>
-                  ALL LOCATIONS
-                </div>
 
-                <div style={{ fontSize: '0.64rem', color: '#94a3b8' }}>
-                  {sortedLocations.length} Interactive Spaces
-                </div>
+              <div style={{ fontSize: '0.64rem', color: '#94a3b8' }}>
+                {sortedLocations.length} Interactive Spaces
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setRightSidebarOpen(false)}
-              className="smart-close-btn"
-              title="Close List"
-            >
-              <X size={18} />
-            </button>
           </div>
-
+          <button
+            type="button"
+            onClick={() => setRightSidebarOpen(false)}
+            className="smart-close-btn"
+            title="Close List"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Locations List Items */}
@@ -2200,7 +2232,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
       {/* Bottom Floating Quick Explore Carousel */}
       {locations.length > 0 && (
         <div className={`smart-bottom-carousel-wrapper ${quickExploreOpen ? 'open' : 'collapsed'}`}>
-          {/* Header Bar with Toggle Button (Pure Icon) */}
+          {/* Header Bar with Toggle Button */}
           <button
             type="button"
             className="smart-carousel-title-btn"
@@ -2211,7 +2243,8 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             }}
             title={quickExploreOpen ? 'Minimize Quick Explore' : 'Expand Quick Explore'}
           >
-            {quickExploreOpen ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+            <span className="smart-carousel-title-text">Quick Explore</span>
+            {quickExploreOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
           </button>
 
           {quickExploreOpen && (
