@@ -1138,6 +1138,7 @@ interface SceneGroupProps {
   isAdmin?: boolean;
   galleryPhotos?: string[];
   locations?: any[];
+  sceneGroupRef?: React.RefObject<THREE.Group>;
 }
 
 const SceneGroup: React.FC<SceneGroupProps> = ({
@@ -1164,9 +1165,11 @@ const SceneGroup: React.FC<SceneGroupProps> = ({
   readOnly = false,
   isAdmin = false,
   galleryPhotos = [],
-  locations = []
+  locations = [],
+  sceneGroupRef
 }) => {
-  const groupRef = useRef<THREE.Group>(null);
+  const internalGroupRef = useRef<THREE.Group>(null);
+  const groupRef = sceneGroupRef || internalGroupRef;
   const [activeInfoId, setActiveInfoId] = useState<string | null>(null);
   const [contextMenuId, setContextMenuId] = useState<string | null>(null);
 
@@ -1843,6 +1846,47 @@ const CameraZoomEffect: React.FC<{ isZooming: boolean; targetPos: [number, numbe
   return null;
 };
 
+const CameraInitHandler: React.FC<{ initialCameraView?: CameraViewState; controlsRef: any; sceneGroupRef?: React.RefObject<THREE.Group> }> = ({ initialCameraView, controlsRef, sceneGroupRef }) => {
+  const { camera } = useThree();
+  const appliedRef = useRef(false);
+
+  useFrame(() => {
+    if (!appliedRef.current && controlsRef.current && initialCameraView?.cameraPosition) {
+      if (sceneGroupRef?.current) {
+        sceneGroupRef.current.rotation.y = initialCameraView.groupRotationY || 0;
+      }
+      const pCam = camera as THREE.PerspectiveCamera;
+      pCam.position.set(
+        initialCameraView.cameraPosition[0],
+        initialCameraView.cameraPosition[1],
+        initialCameraView.cameraPosition[2]
+      );
+      if (initialCameraView.target) {
+        controlsRef.current.target.set(
+          initialCameraView.target[0],
+          initialCameraView.target[1],
+          initialCameraView.target[2]
+        );
+      } else {
+        controlsRef.current.target.set(0, 0, 0);
+      }
+      if (initialCameraView.fov) {
+        pCam.fov = initialCameraView.fov;
+        pCam.updateProjectionMatrix();
+      }
+      pCam.lookAt(controlsRef.current.target);
+      controlsRef.current.update();
+      appliedRef.current = true;
+    }
+  });
+
+  useEffect(() => {
+    appliedRef.current = false;
+  }, [initialCameraView]);
+
+  return null;
+};
+
 export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
   adjustments = DEFAULT_ADJUSTMENTS,
   directions = { F: [], B: [], L: [], R: [], U: [], D: [] },
@@ -1885,6 +1929,7 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
   const [isBlurring, setIsBlurring] = useState(false);
   const [zoomTargetPos, setZoomTargetPos] = useState<[number, number, number] | null>(null);
   const controlsRef = useRef<any>(null);
+  const sceneGroupRef = useRef<THREE.Group>(null);
   const headingTextRef = useRef<HTMLSpanElement>(null);
   const compassContainerRef = useRef<HTMLDivElement>(null);
 
@@ -2004,6 +2049,9 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
   }, []);
 
   const resetNorth = useCallback(() => {
+    if (sceneGroupRef.current) {
+      sceneGroupRef.current.rotation.y = 0;
+    }
     if (controlsRef.current) {
       const camera = controlsRef.current.object;
       camera.position.set(0, 0, -0.01);
@@ -2020,13 +2068,17 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
       return {
         cameraPosition: [camera.position.x, camera.position.y, camera.position.z],
         target: [target.x, target.y, target.z],
-        fov: camera.fov || 75
+        fov: camera.fov || 75,
+        groupRotationY: sceneGroupRef.current?.rotation.y || 0
       };
     }
     return null;
   }, []);
 
   const setCameraView = useCallback((view: CameraViewState) => {
+    if (sceneGroupRef.current) {
+      sceneGroupRef.current.rotation.y = view.groupRotationY || 0;
+    }
     if (controlsRef.current && view) {
       const camera = controlsRef.current.object as THREE.PerspectiveCamera;
       if (view.cameraPosition) {
@@ -2398,8 +2450,9 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
         </div>
       )}
 
-      <Canvas camera={{ position: [0, 0, -0.01], fov: 75 }}>
+      <Canvas camera={{ position: initialCameraView?.cameraPosition || [0, 0, -0.01], fov: initialCameraView?.fov || 75 }}>
         <CanvasZoomHandler />
+        <CameraInitHandler initialCameraView={initialCameraView} controlsRef={controlsRef} sceneGroupRef={sceneGroupRef} />
         <CameraZoomEffect isZooming={isZooming} targetPos={zoomTargetPos} controlsRef={controlsRef} />
         <ambientLight intensity={1.5} />
         <SceneGroup
@@ -2427,6 +2480,7 @@ export const Viewer360 = React.forwardRef<Viewer360Ref, Viewer360Props>(({
           isAdmin={isAdmin}
           galleryPhotos={galleryPhotos}
           locations={locations}
+          sceneGroupRef={sceneGroupRef}
         />
         <OrbitControls
           ref={controlsRef}

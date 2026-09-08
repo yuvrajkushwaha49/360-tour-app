@@ -564,6 +564,15 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
   };
 
   const handleEnter360 = () => {
+    // 1. Immediately orient the 360 camera towards saved start view while intro video is still visible
+    const startLocId = tourData?.startLocationId;
+    const locationsList = tourData?.locations || [];
+    const targetLoc = (startLocId && locationsList.find((l: any) => l.id === startLocId)) || locationsList.find((l: any) => l.id === activeLocationId) || locationsList[0];
+    const savedCameraView = targetLoc?.initialCameraView || tourData?.initialCameraView;
+    if (savedCameraView && viewer360Ref.current?.setCameraView) {
+      viewer360Ref.current.setCameraView(savedCameraView);
+    }
+
     setIsExitingIntro(true);
     setTimeout(() => {
       setShowIntroVideo(false);
@@ -573,23 +582,17 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
         introVideoRef.current.pause();
       }
 
-      // If a default starting location is configured for the tour, switch to it
-      const startLocId = tourData?.startLocationId;
-      const locationsList = tourData?.locations || [];
+      // Ensure start location id is activated
       if (startLocId && locationsList.some((l: any) => l.id === startLocId)) {
         setActiveLocationId(startLocId);
         localStorage.setItem(`active_public_loc_${tourId}`, startLocId);
       }
 
-      // If a saved starting camera angle exists, restore it smoothly
-      const targetLoc = locationsList.find((l: any) => l.id === (startLocId || activeLocationId)) || locationsList[0];
-      const savedCameraView = targetLoc?.initialCameraView || tourData?.initialCameraView;
+      // Re-apply camera view to ensure exact angle is locked
       if (savedCameraView && viewer360Ref.current?.setCameraView) {
-        setTimeout(() => {
-          viewer360Ref.current?.setCameraView?.(savedCameraView);
-        }, 120);
+        viewer360Ref.current.setCameraView(savedCameraView);
       }
-    }, 650);
+    }, 450);
   };
 
   // Admin action: Save current location and exact camera angle (yaw, pitch, fov) as default starting view
@@ -2179,7 +2182,7 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
           hotspots={hotspotsEnabled ? (currentLocation?.hotspots || []) : []}
           stitchedPanoPath={currentLocation?.stitchedPanoPath || currentLocation?.imagePath}
           adjustments={dynamicAdjustments}
-          autoRotate={autoRotate}
+          autoRotate={showIntroVideo ? false : autoRotate}
           autoRotateSpeed={autoRotateSpeed}
           onImageNotFound={onBack}
           onNavigate={(targetId: string, position?: [number, number, number]) => {
