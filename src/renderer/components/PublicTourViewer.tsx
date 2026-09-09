@@ -52,7 +52,8 @@ import {
   Volume2,
   VolumeX,
   Video,
-  Target
+  Target,
+  LogOut
 } from 'lucide-react';
 import Viewer360, { Viewer360Ref } from './Viewer360';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
@@ -82,6 +83,7 @@ interface PublicTourViewerProps {
   tourId: string;
   onBack: () => void;
   onLogin?: () => void;
+  onLogout?: () => void;
 }
 
 // Universal Video / Embed Resolver (supports YouTube, Vimeo, and Direct HTML5 / CloudFront video URLs)
@@ -114,7 +116,22 @@ export function getMediaEmbed(rawUrl: string): { type: 'youtube' | 'vimeo' | 'vi
   };
 }
 
-export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTourViewerProps) {
+export default function PublicTourViewer({ tourId, onBack, onLogin, onLogout }: PublicTourViewerProps) {
+  const handleLogout = () => {
+    localStorage.removeItem('crm_user');
+    localStorage.removeItem('crm_token');
+    localStorage.removeItem('active_view');
+    localStorage.removeItem('active_public_tour_id');
+    if (onLogout) {
+      onLogout();
+    } else if (onLogin) {
+      onLogin();
+    } else if (onBack) {
+      onBack();
+    } else {
+      window.location.reload();
+    }
+  };
   const [tourName, setTourName] = useState<string>('');
   const [tourData, setTourData] = useState<any>(null);
   const [clientLogo, setClientLogo] = useState<string>('');
@@ -2036,6 +2053,28 @@ export default function PublicTourViewer({ tourId, onBack, onLogin }: PublicTour
             <div>
               <div className="smart-menu-label">DOWNLOADS</div>
               <div className="smart-menu-sub">{currentLocation?.name || 'Space'} docs ({downloadsList.length})</div>
+            </div>
+          </div>
+
+          {/* Logout Action */}
+          <div
+            className="smart-menu-item smart-logout-menu-item"
+            onClick={handleLogout}
+            title="Logout and exit viewer"
+            style={{
+              marginTop: '4px',
+              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+              paddingTop: '8px'
+            }}
+          >
+            <div className="smart-menu-icon" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#f87171' }}>
+              <LogOut size={15} />
+            </div>
+            <div>
+              <div className="smart-menu-label" style={{ color: '#fca5a5' }}>LOGOUT</div>
+              <div className="smart-menu-sub">
+                {currentUser ? `Signed in as ${currentUser.name || currentUser.email || 'User'}` : 'Exit session'}
+              </div>
             </div>
           </div>
         </div>

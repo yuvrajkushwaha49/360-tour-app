@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Compass,
   Share2,
@@ -18,15 +18,20 @@ import {
   Crown,
   Edit3,
   X,
-  Archive
+  Sparkles,
+  Calendar,
+  Link2,
+  MoreHorizontal,
+  Box,
+  User,
+  FileText
 } from 'lucide-react';
-import { exportProjectToZip } from '../utils/exportZip';
 import { API_BASE_URL, toCloudFrontUrl } from '../utils/apiConfig';
 import { loadLargeDraft, deleteLargeDraft } from '../utils/dbStorage';
 import EditUserModal from './EditUserModal';
 import { createShareUrl } from '../utils/shareSecurity';
 
-interface ProjectItem {
+export interface ProjectItem {
   id: string;
   user_id: string;
   name: string;
@@ -42,6 +47,36 @@ interface ProjectItem {
     resolution?: number;
     [key: string]: any;
   };
+}
+
+// Helper to extract the first available image/thumbnail for a 360 project
+export function getProjectThumbnail(project: ProjectItem): string | null {
+  const locs = project.data?.locations || [];
+  for (const loc of locs) {
+    if (loc.thumbnailUrl) return toCloudFrontUrl(loc.thumbnailUrl);
+    if (loc.thumbnailPath) return toCloudFrontUrl(loc.thumbnailPath);
+    if (loc.stitchedPanoPath) return toCloudFrontUrl(loc.stitchedPanoPath);
+    const dirs = loc.directions || {};
+    for (const d of ['F', 'B', 'L', 'R', 'U', 'D']) {
+      if (dirs[d] && dirs[d][0]) {
+        const item = dirs[d][0];
+        const p = item.url || item.path;
+        if (p) return toCloudFrontUrl(p);
+      }
+    }
+  }
+  return null;
+}
+
+export function formatProjectDate(dateStr?: string): string {
+  if (!dateStr) return 'May 13, 2025';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'Recently Created';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return 'Recently Created';
+  }
 }
 
 // Helper to determine if a 360 virtual tour project has all faces/stitched pano completed
@@ -110,26 +145,6 @@ export default function ClientDashboard({
   const [editIsPublic, setEditIsPublic] = useState<boolean>(true);
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
 
-  const [exportProgressMsg, setExportProgressMsg] = useState<string | null>(null);
-  const [exportPercent, setExportPercent] = useState<number>(0);
-
-  const handleExportZip = async (project: ProjectItem) => {
-    try {
-      setExportProgressMsg('Preparing standalone package...');
-      setExportPercent(5);
-      await exportProjectToZip(project, (msg, pct) => {
-        setExportProgressMsg(msg);
-        setExportPercent(pct);
-      });
-    } catch (err: any) {
-      alert(`Export failed: ${err.message}`);
-    } finally {
-      setTimeout(() => {
-        setExportProgressMsg(null);
-        setExportPercent(0);
-      }, 800);
-    }
-  };
 
   useEffect(() => {
     fetchProjects();
@@ -248,155 +263,151 @@ export default function ClientDashboard({
     setEditIsPublic(project.is_public);
   };
 
-  const handleSaveProjectDetails = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingProject || !editName.trim()) return;
-
+  const handleSaveEdit = async () => {
+    if (!editingProject) return;
     setIsSavingEdit(true);
-    const updatedData = {
-      ...editingProject.data,
-      description: editDescription.trim()
-    };
+
+    const activeToken = token || localStorage.getItem('crm_token');
 
     try {
+      const updatedData = {
+        ...(editingProject.data || {}),
+        description: editDescription
+      };
+
       const response = await fetch(`${API_BASE_URL}/api/projects/${editingProject.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {})
         },
         body: JSON.stringify({
-          name: editName.trim(),
-          data: updatedData,
+          name: editName,
+          user_id: editTargetUserId || editingProject.user_id,
           is_public: editIsPublic,
-          target_user_id: editTargetUserId || undefined
+          data: updatedData
         })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update project details');
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to update project.');
       }
 
-      const assignedUser = usersList.find(u => u.id === editTargetUserId);
-
-      // Update state locally
-      setProjects(prev => prev.map(p => {
-        if (p.id === editingProject.id) {
-          return {
-            ...p,
-            name: editName.trim(),
-            user_id: editTargetUserId || p.user_id,
-            client_name: assignedUser ? assignedUser.name : p.client_name,
-            client_email: assignedUser ? assignedUser.email : p.client_email,
-            is_public: editIsPublic,
-            data: updatedData
-          };
+      // Update local storage if exists
+      try {
+        const localListStr = localStorage.getItem('local_saved_projects') || '[]';
+        const localList: any[] = JSON.parse(localListStr);
+        const idx = localList.findIndex((p: any) => p.id === editingProject.id);
+        if (idx >= 0) {
+          localList[idx].name = editName;
+          localList[idx].is_public = editIsPublic;
+          localList[idx].data = updatedData;
+          localStorage.setItem('local_saved_projects', JSON.stringify(localList));
         }
-        return p;
-      }));
+      } catch (e) { }
 
-      setCopiedId(`edited-${editingProject.id}`);
+      setToast({ message: `Project "${editName}" updated successfully!`, type: 'success' });
       setEditingProject(null);
+      fetchProjects();
     } catch (err: any) {
-      alert(err.message || 'Failed to save changes');
+      setToast({ message: err.message || 'Error updating project', type: 'error' });
     } finally {
       setIsSavingEdit(false);
     }
   };
 
-  const togglePublic = async (project: ProjectItem) => {
-    const newIsPublic = !project.is_public;
-    const updatedData = { ...project.data };
-    if (!newIsPublic && updatedData.locations) {
-      updatedData.locations = updatedData.locations.map((loc: any) => ({
-        ...loc,
-        isPublic: false,
-        hotspots: (loc.hotspots || []).map((hs: any) => ({ ...hs, isPublic: false }))
-      }));
+  const deleteProject = async (id: string) => {
+    if (id === 'studio-draft-in-progress') {
+      if (confirm('Delete current unsaved in-progress Studio draft? This will clear memory and reset the studio.')) {
+        await deleteLargeDraft('studio_draft_project');
+        try { localStorage.removeItem('studio_draft_project'); } catch (e) { }
+        window.dispatchEvent(new CustomEvent('clear-studio-draft'));
+        fetchProjects();
+        setToast({ message: 'Studio draft cleared successfully.', type: 'info' });
+      }
+      return;
     }
+
+    if (!confirm('Are you sure you want to delete this 360° virtual tour project?')) return;
+
+    const activeToken = token || localStorage.getItem('crm_token');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/projects/${id}`, {
+        method: 'DELETE',
+        headers: { ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}) }
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete project.');
+      }
+
+      try {
+        const localListStr = localStorage.getItem('local_saved_projects') || '[]';
+        const localList = JSON.parse(localListStr).filter((p: any) => p.id !== id);
+        localStorage.setItem('local_saved_projects', JSON.stringify(localList));
+      } catch (e) { }
+
+      setToast({ message: 'Project deleted successfully.', type: 'info' });
+      setProjects(projects.filter(p => p.id !== id));
+    } catch (err: any) {
+      setToast({ message: err.message || 'Error deleting project.', type: 'error' });
+    }
+  };
+
+  const togglePublic = async (project: ProjectItem) => {
+    const updatedStatus = !project.is_public;
+    const activeToken = token || localStorage.getItem('crm_token');
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/projects/${project.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {})
         },
         body: JSON.stringify({
           name: project.name,
-          data: updatedData,
-          is_public: newIsPublic
+          is_public: updatedStatus,
+          data: project.data
         })
       });
 
-      if (response.ok) {
-        setProjects(prev =>
-          prev.map(p => p.id === project.id ? { ...p, is_public: newIsPublic, data: updatedData } : p)
-        );
+      if (!response.ok) {
+        throw new Error('Failed to update public visibility status.');
       }
-    } catch (err) {
-      console.error('Failed to toggle public state:', err);
+
+      setProjects(projects.map(p => p.id === project.id ? { ...p, is_public: updatedStatus } : p));
+      setToast({
+        message: `Project is now ${updatedStatus ? 'Public' : 'Private'}.`,
+        type: 'success'
+      });
+    } catch (err: any) {
+      setToast({ message: err.message || 'Failed to toggle visibility.', type: 'error' });
     }
-  };
-
-  const deleteProject = async (id: string) => {
-    if (user.role !== 'admin') {
-      alert('Permission denied: Only administrators can delete projects.');
-      return;
-    }
-    const proj = projects.find(p => p.id === id);
-    const projName = proj ? proj.name : 'this 360 tour project';
-    const confirmMsg = `⚠️ Are you sure you want to permanently delete "${projName}"?\n\nThis will permanently delete the project and purge all its 360 images.`;
-    if (!window.confirm(confirmMsg)) return;
-
-    if (id === 'studio-draft-in-progress' || id.includes('draft')) {
-      try {
-        await deleteLargeDraft('studio_draft_project');
-        localStorage.removeItem('studio_draft_project');
-        window.dispatchEvent(new CustomEvent('clear-studio-draft'));
-      } catch (e) { }
-    } else {
-      try {
-        await fetch(`${API_BASE_URL}/api/projects/${id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` }
-        });
-      } catch (err) {
-        console.error('Failed to delete project on server:', err);
-      }
-    }
-
-    setProjects(prev => prev.filter(p => p.id !== id));
-    try {
-      const localStr = localStorage.getItem('local_saved_projects');
-      if (localStr) {
-        const list = JSON.parse(localStr).filter((p: any) => p.id !== id);
-        localStorage.setItem('local_saved_projects', JSON.stringify(list));
-      }
-    } catch (e) { }
-
-    // Show beautiful Toast notification
-    setToast({
-      message: `Project "${projName}" deleted successfully!`,
-      type: 'success'
-    });
-    setTimeout(() => {
-      setToast(null);
-    }, 3500);
   };
 
   const copyShareLink = (tourId: string) => {
-    const url = createShareUrl(tourId, 5);
-    navigator.clipboard.writeText(url);
-    setCopiedId(tourId);
-    setTimeout(() => setCopiedId(null), 2500);
+    try {
+      const fullUrl = createShareUrl(tourId, 0);
+      navigator.clipboard.writeText(fullUrl);
+      setCopiedId(tourId);
+      setToast({ message: 'Shareable 360° tour link copied to clipboard!', type: 'success' });
+      setTimeout(() => setCopiedId(null), 2500);
+    } catch (e) {
+      const fallbackUrl = `${window.location.origin}/?tour=${tourId}`;
+      navigator.clipboard.writeText(fallbackUrl);
+      setCopiedId(tourId);
+      setToast({ message: 'Link copied to clipboard!', type: 'success' });
+      setTimeout(() => setCopiedId(null), 2500);
+    }
   };
 
-  const completedCount = projects.filter(p => isProjectCompleted(p)).length;
-  const draftCount = projects.filter(p => !isProjectCompleted(p)).length;
-
   const filteredProjects = projects.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch =
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.client_name && p.client_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (p.data?.description && p.data.description.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -414,216 +425,216 @@ export default function ClientDashboard({
   );
 
   const totalRooms = projects.reduce((acc, proj) => acc + (proj.data?.locations?.length || 0), 0);
+  const publicProjectsCount = projects.filter(p => p.is_public).length;
+  const privateProjectsCount = projects.filter(p => !p.is_public).length;
 
   return (
     <div className="dashboard-container">
-      {/* Export Web ZIP Progress Modal */}
-      {exportProgressMsg && (
-        <div className="position-fixed top-0 start-0 w-100 h-100 bg-black bg-opacity-75 backdrop-blur-md d-flex align-items-center justify-content-center z-50 p-4">
-          <div className="bg-dark p-4 rounded-4 border border-secondary border-opacity-50 text-white max-w-md w-100 shadow-2xl text-center">
-            <div className="p-3 bg-success bg-opacity-15 border border-success border-opacity-30 rounded-circle text-success mx-auto mb-3 d-inline-flex">
-              <Archive size={36} />
-            </div>
-            <h3 className="h5 font-weight-normal mb-1">Exporting Standalone Web Package</h3>
-            <p className="small text-secondary mb-3">{exportProgressMsg}</p>
-            <div className="progress bg-secondary bg-opacity-25 mb-2" style={{ height: '8px' }}>
-              <div
-                className="progress-bar bg-success progress-bar-striped progress-bar-animated"
-                role="progressbar"
-                style={{ width: `${exportPercent}%` }}
-              ></div>
-            </div>
-            <div className="small text-secondary font-mono">{exportPercent}% Completed</div>
-          </div>
+      {/* Toast Notification Alert */}
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            zIndex: 9999,
+            background: toast.type === 'error' ? 'rgba(239, 68, 68, 0.95)' : 'rgba(16, 185, 129, 0.95)',
+            color: '#ffffff',
+            padding: '12px 20px',
+            borderRadius: '12px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+            fontSize: '0.86rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            backdropFilter: 'blur(8px)'
+          }}
+        >
+          {toast.type === 'error' ? '⚠️' : '✅'} {toast.message}
         </div>
       )}
 
-      {/* Hero Header Banner */}
-      <div className="dashboard-hero">
+
+      {/* Hero Header Banner with 3D Orbital Showcase */}
+      <div className="dashboard-hero-card">
         <div className="dashboard-hero-glow-1"></div>
         <div className="dashboard-hero-glow-2"></div>
 
-        <div className="position-relative z-1 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-4">
-          <div>
-            <span className="badge bg-primary bg-opacity-20 text-indigo-300 border border-primary border-opacity-30 px-3 py-2 rounded-pill uppercase tracking-wider small font-weight-normal mb-3 d-inline-flex align-items-center gap-2">
-              <UserCheck className="w-3.5 h-3.5 text-primary" />
-              <span>Welcome, {user.name} ({user.role.toUpperCase()})</span>
-            </span>
-            <h1 className="display-6 hero-title-gradient mb-2">
-              360° Virtual Tour CRM Portal
-            </h1>
-            <p className="text-secondary small max-w-2xl leading-relaxed mb-0 font-weight-normal">
-              {user.role === 'admin'
-                ? 'Manage all registered client accounts, edit project names & descriptions, preview HD 360° tours, and publish projects.'
-                : 'Explore your custom assigned 360° virtual tours interactively or share public tour links with clients.'}
-            </p>
+        <div>
+          <div className="hero-welcome-badge">
+            <span>Welcome, {user.name} </span>
+            <span>👋</span>
           </div>
+          <h1 className="hero-title-main">
+            360° Virtual Tour <span className="hero-title-gradient-text">CRM Portal</span>
+          </h1>
+          <p className="hero-subtitle-text">
+            {user.role === 'admin'
+              ? 'Manage all registered client accounts, edit project names & descriptions, preview HD 360° tours, and publish projects.'
+              : 'Explore your custom assigned 360° virtual tours interactively or share public tour links with clients.'}
+          </p>
 
           {user.role === 'admin' && (
-            <div className="d-flex align-items-center gap-2 flex-wrap">
+            <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
               {onBackToStudio && (
                 <button
                   onClick={onBackToStudio}
-                  className="btn btn-secondary text-white rounded-3 px-4 py-2.5 small font-weight-normal d-flex align-items-center gap-2 shadow-sm"
+                  className="btn btn-secondary text-white rounded-3 px-3 py-2 small font-weight-normal d-flex align-items-center gap-2"
                   title="Go Back to 360 Studio Editor"
                 >
-                  <ArrowLeft className="w-4 h-4 text-info" />
+                  <ArrowLeft size={14} className="text-info" />
                   <span>Back to Studio</span>
                 </button>
               )}
 
-
               {onCreateNewProject && (
                 <button
                   onClick={onCreateNewProject}
-                  className="btn btn-primary font-weight-normal rounded-3 px-4 py-2.5 small d-flex align-items-center gap-2 shadow-sm"
-                  style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }}
+                  className="btn-view-360-primary"
+                  style={{ padding: '0.5rem 1.15rem' }}
                 >
-                  <PlusCircle className="w-4 h-4" />
+                  <PlusCircle size={15} />
                   <span>Create New Project</span>
                 </button>
               )}
             </div>
           )}
         </div>
+
+        {/* 3D Showcase Graphic */}
+        <div className="hero-3d-showcase">
+          <img
+            src="/images/home_page_hero.png"
+            alt="360° Virtual Tour Showcase"
+            className="hero-3d-main-img"
+          />
+        </div>
       </div>
 
-      {/* KPI Stats Summary Cards (Admin Panel Only) */}
+      {/* 4 Stats Cards Grid Row (Only for Admin) */}
       {user.role === 'admin' && (
-        <div className="row g-3 mb-4">
-          <div className="col-12 col-sm-6 col-lg">
-            <div
-              onClick={() => setActiveDashboardTab('projects')}
-              className={`kpi-card cursor-pointer ${activeDashboardTab === 'projects' ? 'active-indigo' : ''}`}
-            >
-              <div>
-                <span className="small text-secondary font-weight-normal text-uppercase tracking-wider d-block mb-1">Total Tours</span>
-                <span className="h3 font-weight-normal text-white mb-0">{projects.length}</span>
-              </div>
-              <div className="kpi-icon-box bg-opacity-20 text-primary border border-primary border-opacity-30">
-                <Compass className="w-6 h-6" />
-              </div>
+        <div className="stats-grid-row">
+          {/* Card 1: Total 360° Projects */}
+          <div
+            className="stat-metric-card cursor-pointer"
+            onClick={() => setActiveDashboardTab('projects')}
+          >
+            <div className="stat-icon-wrapper stat-icon-purple">
+              <Box size={22} />
+            </div>
+            <div className="stat-metric-content">
+              <span className="stat-metric-label">Total 360° Projects</span>
+              <span className="stat-metric-value">{projects.length}</span>
+              <span className="stat-metric-subtext">All projects in your account</span>
             </div>
           </div>
 
-          <div className="col-12 col-sm-6 col-lg">
-            <div
-              onClick={() => setActiveDashboardTab('users')}
-              className={`kpi-card cursor-pointer ${activeDashboardTab === 'users' ? 'active-amber' : ''}`}
-            >
-              <div>
-                <span className="small text-secondary font-weight-normal text-uppercase tracking-wider d-block mb-1">Total Users</span>
-                <span className="h3 font-weight-normal text-warning mb-0">{usersList.length}</span>
-              </div>
-              <div className="kpi-icon-box bg-opacity-20 text-warning border border-warning border-opacity-30">
-                <Users className="w-6 h-6" />
-              </div>
+          {/* Card 2: Private Projects */}
+          <div
+            className="stat-metric-card cursor-pointer"
+            onClick={() => { setActiveDashboardTab('projects'); setFilterTab('private'); }}
+          >
+            <div className="stat-icon-wrapper stat-icon-blue">
+              <Lock size={22} />
+            </div>
+            <div className="stat-metric-content">
+              <span className="stat-metric-label">Private Projects</span>
+              <span className="stat-metric-value">{privateProjectsCount}</span>
+              <span className="stat-metric-subtext">Only visible to you</span>
             </div>
           </div>
 
-          <div className="col-12 col-sm-6 col-lg">
-            <div className="kpi-card">
-              <div>
-                <span className="small text-secondary font-weight-normal text-uppercase tracking-wider d-block mb-1">Public Tours</span>
-                <span className="h3 font-weight-normal text-success mb-0">{projects.filter(p => p.is_public).length}</span>
-              </div>
-              <div className="kpi-icon-box opacity-20 text-success border border-success border-opacity-30">
-                <Globe className="w-6 h-6" />
-              </div>
+          {/* Card 3: Public Projects */}
+          <div
+            className="stat-metric-card cursor-pointer"
+            onClick={() => { setActiveDashboardTab('projects'); setFilterTab('public'); }}
+          >
+            <div className="stat-icon-wrapper stat-icon-green">
+              <Globe size={22} />
+            </div>
+            <div className="stat-metric-content">
+              <span className="stat-metric-label">Public Projects</span>
+              <span className="stat-metric-value">{publicProjectsCount}</span>
+              <span className="stat-metric-subtext">Shared with everyone</span>
             </div>
           </div>
 
-          <div className="col-12 col-sm-6 col-lg">
-            <div className="kpi-card">
-              <div>
-                <span className="small text-secondary font-weight-normal text-uppercase tracking-wider d-block mb-1">Private Tours</span>
-                <span className="h3 font-weight-normal text-warning mb-0">{projects.filter(p => !p.is_public).length}</span>
-              </div>
-              <div className="kpi-icon-box bg-opacity-20 text-warning border border-warning border-opacity-30">
-                <Lock className="w-6 h-6" />
-              </div>
+          {/* Card 4: Rooms Configured */}
+          <div className="stat-metric-card">
+            <div className="stat-icon-wrapper stat-icon-amber">
+              <Layers size={22} />
             </div>
-          </div>
-
-          <div className="col-12 col-sm-6 col-lg">
-            <div className="kpi-card">
-              <div>
-                <span className="small text-secondary font-weight-normal text-uppercase tracking-wider d-block mb-1">360° Rooms</span>
-                <span className="h3 font-weight-normal text-info mb-0">{totalRooms}</span>
-              </div>
-              <div className="kpi-icon-box opacity-20 text-info border border-info border-opacity-30">
-                <Layers className="w-6 h-6" />
-              </div>
+            <div className="stat-metric-content">
+              <span className="stat-metric-label">Rooms Configured</span>
+              <span className="stat-metric-value">{totalRooms}</span>
+              <span className="stat-metric-subtext">Total rooms across projects</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* Main Dashboard Navigation Bar: All Projects vs All Users */}
-      <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4 pb-3 border-bottom border-secondary border-opacity-25">
-        <div className="d-flex align-items-center gap-2">
-          <button
-            onClick={() => setActiveDashboardTab('projects')}
-            className={`nav-tab-btn d-flex align-items-center gap-2 ${activeDashboardTab === 'projects' ? 'active-tab-projects' : 'btn-outline-secondary text-secondary'
-              }`}
-          >
-            <Compass className="w-4 h-4" />
-            <span>All 360° Projects ({projects.length})</span>
-          </button>
-
-          {user.role === 'admin' && (
+      {/* Admin Tab Switch (Projects vs Users) */}
+      {user.role === 'admin' && (
+        <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+          <div className="d-flex align-items-center gap-2">
+            <button
+              onClick={() => setActiveDashboardTab('projects')}
+              className={`filter-pill-btn ${activeDashboardTab === 'projects' ? 'active' : ''}`}
+            >
+              <Compass size={15} />
+              <span>All 360° Projects ({projects.length})</span>
+            </button>
             <button
               onClick={() => setActiveDashboardTab('users')}
-              className={`nav-tab-btn d-flex align-items-center gap-2 ${activeDashboardTab === 'users' ? 'active-tab-users' : 'btn-outline-secondary text-secondary'
-                }`}
+              className={`filter-pill-btn ${activeDashboardTab === 'users' ? 'active' : ''}`}
             >
-              <Users className="w-4 h-4" />
-              <span>All Registered Users ({usersList.length})</span>
+              <Users size={15} />
+              <span>Registered Users ({usersList.length})</span>
+            </button>
+          </div>
+
+          {onOpenAddUserModal && (
+            <button
+              onClick={onOpenAddUserModal}
+              className="btn btn-sm btn-outline-warning rounded-3 px-3 py-1.5 d-flex align-items-center gap-2"
+            >
+              <UserPlus size={14} />
+              <span>+ Add Client User</span>
             </button>
           )}
         </div>
+      )}
 
-        {user.role === 'admin' && onOpenAddUserModal && (
-          <button
-            onClick={onOpenAddUserModal}
-            className="btn btn-outline-warning rounded-3 px-3 py-2 small font-weight-normal d-flex align-items-center gap-2"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>+ Add New User / Client</span>
-          </button>
-        )}
-      </div>
-
-      {/* VIEW CONTENT 1: ALL REGISTERED USERS */}
-      {activeDashboardTab === 'users' ? (
+      {/* VIEW 1: USERS LIST (ADMIN ONLY) */}
+      {activeDashboardTab === 'users' && user.role === 'admin' ? (
         <div>
           {/* User Search Bar */}
-          <div className="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3 mb-4 bg-dark bg-opacity-60 p-3 rounded-4 border border-secondary border-opacity-25">
-            <div className="position-relative w-100 max-w-md">
-              <Search className="position-absolute top-50 start-0 translate-middle-y ms-3 text-secondary w-4 h-4" />
+          <div className="search-filter-row">
+            <div className="search-bar-wrapper">
+              <Search size={16} className="search-icon-inside" />
               <input
                 type="text"
                 placeholder="Search users by name, email, or role..."
                 value={userSearchQuery}
                 onChange={(e) => setUserSearchQuery(e.target.value)}
-                className="form-control search-input-box"
+                className="search-bar-input"
               />
             </div>
-
-            <div className="small text-secondary font-weight-normal text-uppercase">
-              Showing {filteredUsers.length} of {usersList.length} User Account{usersList.length !== 1 ? 's' : ''}
+            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+              Showing {filteredUsers.length} of {usersList.length} User Accounts
             </div>
           </div>
 
           {usersLoading ? (
             <div className="py-5 text-center text-secondary">
               <div className="spinner-border text-warning mb-3" role="status"></div>
-              <p className="small font-weight-normal">Loading User Accounts...</p>
+              <p className="small">Loading User Accounts...</p>
             </div>
           ) : filteredUsers.length === 0 ? (
             <div className="py-5 text-center bg-dark bg-opacity-50 border border-secondary border-opacity-25 rounded-4 p-4 max-w-md mx-auto">
               <Users className="w-12 h-12 text-secondary mx-auto mb-3" />
-              <h3 className="h6 font-weight-normal text-white mb-1">No Users Found</h3>
+              <h3 className="h6 text-white mb-1">No Users Found</h3>
               <p className="small text-secondary mb-0">No user accounts match your search query.</p>
             </div>
           ) : (
@@ -653,20 +664,20 @@ export default function ClientDashboard({
                               )}
                             </div>
                             <div>
-                              <h3 className="h6 font-weight-normal text-white mb-0">{usr.name}</h3>
+                              <h3 className="h6 text-white mb-0">{usr.name}</h3>
                               <span className="small text-secondary font-mono">ID: {usr.id}</span>
                             </div>
                           </div>
 
                           <div className="d-flex align-items-center gap-2">
                             {isAdmin ? (
-                              <span className="badge bg-opacity-25 text-warning border border-warning border-opacity-25 px-2.5 py-1.5 rounded-pill small font-weight-normal">
-                                <Crown className="w-3.5 h-3.5 me-1" />
+                              <span className="badge bg-opacity-25 text-warning border border-warning border-opacity-25 px-2.5 py-1.5 rounded-pill small">
+                                <Crown size={12} className="me-1" />
                                 <span>Admin</span>
                               </span>
                             ) : (
-                              <span className="badge bg-primary bg-opacity-25 text-primary border border-primary border-opacity-25 px-2.5 py-1.5 rounded-pill small font-weight-normal">
-                                <UserCheck className="w-3.5 h-3.5 me-1" />
+                              <span className="badge bg-primary bg-opacity-25 text-primary border border-primary border-opacity-25 px-2.5 py-1.5 rounded-pill small">
+                                <UserCheck size={12} className="me-1" />
                                 <span>Client</span>
                               </span>
                             )}
@@ -676,9 +687,8 @@ export default function ClientDashboard({
                                 onClick={() => setEditingUser(usr)}
                                 className="btn btn-sm btn-outline-secondary text-secondary p-1 rounded-2 border-0"
                                 title="Edit Client Details & Brand Logo"
-                                style={{ cursor: 'pointer' }}
                               >
-                                <Edit3 className="w-4 h-4 text-info" />
+                                <Edit3 size={15} className="text-info" />
                               </button>
                             )}
                           </div>
@@ -686,12 +696,12 @@ export default function ClientDashboard({
 
                         <div className="bg-dark bg-opacity-60 p-3 rounded-3 border border-secondary border-opacity-25 mb-3">
                           <div className="d-flex align-items-center gap-2 small text-secondary mb-2">
-                            <Mail className="w-4 h-4 text-secondary shrink-0" />
+                            <Mail size={14} className="shrink-0" />
                             <span className="text-truncate">{usr.email}</span>
                           </div>
                           <div className="d-flex align-items-center justify-content-between small pt-2 border-top border-secondary border-opacity-25">
-                            <span className="text-secondary font-weight-normal">Assigned Tours:</span>
-                            <span className="badge   bg-opacity-20 text-warning border border-warning border-opacity-30 font-weight-normal">
+                            <span className="text-secondary">Assigned Tours:</span>
+                            <span className="badge bg-warning bg-opacity-20 text-warning border border-warning border-opacity-30">
                               {assignedCount} Project{assignedCount !== 1 ? 's' : ''}
                             </span>
                           </div>
@@ -699,7 +709,7 @@ export default function ClientDashboard({
                       </div>
 
                       <div className="pt-2 border-top border-secondary border-opacity-25">
-                        <span className="small text-secondary font-weight-normal text-uppercase d-block mb-2">Assigned 360 Tours</span>
+                        <span className="small text-secondary text-uppercase d-block mb-2">Assigned 360 Tours</span>
                         {assignedCount === 0 ? (
                           <span className="small text-secondary italic">No assigned projects yet</span>
                         ) : (
@@ -710,8 +720,8 @@ export default function ClientDashboard({
                                 onClick={() => onLaunchPublicView(p.id)}
                                 className="small text-secondary bg-dark p-2 rounded-3 border border-secondary border-opacity-25 d-flex align-items-center justify-content-between cursor-pointer"
                               >
-                                <span className="text-truncate font-weight-normal">{p.name}</span>
-                                <Eye className="w-3.5 h-3.5 text-primary ms-1" />
+                                <span className="text-truncate">{p.name}</span>
+                                <Eye size={13} className="text-primary ms-1" />
                               </div>
                             ))}
                           </div>
@@ -725,67 +735,66 @@ export default function ClientDashboard({
           )}
         </div>
       ) : (
-        /* VIEW CONTENT 2: ALL 360° PROJECTS */
+        /* VIEW 2: ALL 360° PROJECTS (HORIZONTAL CARDS) */
         <div>
-          {/* Search Bar & Filter Tabs */}
-          <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
-            <div className="position-relative w-100 max-w-md">
-              <Search className="position-absolute top-50 start-0 translate-middle-y ms-3 text-secondary w-4 h-4" />
+          {/* Search Bar and Filter Tabs Row */}
+          <div className="search-filter-row">
+            <div className="search-bar-wrapper">
+              <Search size={16} className="search-icon-inside" />
               <input
                 type="text"
                 placeholder="Search virtual tours by name, client, or description..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="form-control search-input-box"
+                className="search-bar-input"
               />
             </div>
 
-            <div className="btn-group rounded-3 p-1 bg-dark border border-secondary border-opacity-25 flex-wrap">
-              <button
-                onClick={() => setFilterTab('all')}
-                className={`btn btn-sm ${filterTab === 'all' ? 'btn-primary font-weight-normal' : 'btn-dark text-secondary'}`}
-              >
-                All Projects ({projects.length})
-              </button>
-              <button
-                onClick={() => setFilterTab('completed')}
-                className={`btn btn-sm ${filterTab === 'completed' ? 'btn-success font-weight-normal' : 'btn-dark text-secondary'}`}
-              >
-                ✅ Completed ({completedCount})
-              </button>
-              {user.role === 'admin' && (
+            {user.role === 'admin' && (
+              <div className="filter-pills-group">
+                <button
+                  onClick={() => setFilterTab('all')}
+                  className={`filter-pill-btn ${filterTab === 'all' ? 'active' : ''}`}
+                >
+                  All ({projects.length})
+                </button>
+
+                <button
+                  onClick={() => setFilterTab('private')}
+                  className={`filter-pill-btn ${filterTab === 'private' ? 'active' : ''}`}
+                >
+                  <Lock size={13} />
+                  <span>Private ({privateProjectsCount})</span>
+                </button>
+
+                <button
+                  onClick={() => setFilterTab('public')}
+                  className={`filter-pill-btn ${filterTab === 'public' ? 'active' : ''}`}
+                >
+                  <Globe size={13} />
+                  <span>Public ({publicProjectsCount})</span>
+                </button>
+
                 <button
                   onClick={() => setFilterTab('draft')}
-                  className={`btn btn-sm ${filterTab === 'draft' ? 'btn-danger font-weight-normal' : 'btn-dark text-secondary'}`}
+                  className={`filter-pill-btn ${filterTab === 'draft' ? 'active' : ''}`}
                 >
-                  📝 Drafts / Incomplete ({draftCount})
+                  <span>Drafts ({projects.filter(p => !isProjectCompleted(p)).length})</span>
                 </button>
-              )}
-              <button
-                onClick={() => setFilterTab('private')}
-                className={`btn btn-sm ${filterTab === 'private' ? 'btn-warning text-dark font-weight-normal' : 'btn-dark text-secondary'}`}
-              >
-                <Lock className="w-3.5 h-3.5 me-1" /> Private
-              </button>
-              <button
-                onClick={() => setFilterTab('public')}
-                className={`btn btn-sm ${filterTab === 'public' ? 'btn-info font-weight-normal text-white' : 'btn-dark text-secondary'}`}
-              >
-                <Globe className="w-3.5 h-3.5 me-1" /> Public
-              </button>
-            </div>
+              </div>
+            )}
           </div>
 
-          {/* Projects Grid */}
+          {/* Projects Horizontal List Cards */}
           <div>
             {loading ? (
               <div className="py-5 text-center text-secondary">
                 <div className="spinner-border text-primary mb-3" role="status"></div>
-                <p className="small font-weight-normal">Loading 360° Virtual Tour Projects...</p>
+                <p className="small">Loading 360° Virtual Tour Projects...</p>
               </div>
             ) : error ? (
               <div className="p-4 bg-danger bg-opacity-10 border border-danger border-opacity-25 rounded-4 text-danger text-center max-w-md mx-auto">
-                <h3 className="h6 font-weight-normal mb-1">⚠️ Connection Error</h3>
+                <h3 className="h6 mb-1">⚠️ Connection Error</h3>
                 <p className="small mb-3">{error}</p>
                 {onLogout && (
                   <button onClick={onLogout} className="btn btn-sm btn-danger rounded-3">
@@ -796,160 +805,163 @@ export default function ClientDashboard({
             ) : filteredProjects.length === 0 ? (
               <div className="py-5 text-center bg-dark bg-opacity-50 border border-secondary border-opacity-25 rounded-4 p-4 max-w-md mx-auto">
                 <Compass className="w-12 h-12 text-secondary mx-auto mb-3" />
-                <h3 className="h6 font-weight-normal text-white mb-1">No 360° Tours Found</h3>
+                <h3 className="h6 text-white mb-1">No 360° Tours Found</h3>
                 <p className="small text-secondary mb-0">No virtual tour projects match your search query.</p>
               </div>
             ) : (
-              <div className="row g-4">
+              <div className="projects-horizontal-list">
                 {filteredProjects.map((project) => {
                   const locationCount = project.data?.locations?.length || 0;
+                  const thumbnail = getProjectThumbnail(project);
+                  const isCompleted = isProjectCompleted(project);
 
                   return (
-                    <div key={project.id} className="col-12 col-md-6 col-lg-4">
-                      <div className="project-card h-100">
-                        {/* Card Header / Preview */}
-                        <div className="project-card-header">
-                          <div className="text-center position-relative z-1">
-                            <div className="kpi-icon-box bg-opacity-25 text-primary border border-primary border-opacity-30 mx-auto mb-2 shadow">
-                              <Compass className="w-7 h-7" />
-                            </div>
-                            <span className="badge bg-dark bg-opacity-80 text-white border border-secondary border-opacity-25 rounded-pill px-3 py-1.5 small font-weight-normal">
-                              {locationCount} Room{locationCount !== 1 ? 's' : ''} Configured
+                    <div key={project.id} className="project-horizontal-card">
+                      {/* Three Dots More Menu (Admin Only) */}
+                      {user.role === 'admin' && (
+                        <button
+                          onClick={() => handleOpenEditModal(project)}
+                          className="btn-card-more-menu"
+                          title="Edit Project Details"
+                        >
+                          <MoreHorizontal size={15} />
+                        </button>
+                      )}
+
+                      {/* Left Thumbnail Image Container */}
+                      <div
+                        className="card-thumb-container cursor-pointer"
+                        onClick={() => {
+                          if (!isCompleted && user.role === 'admin') {
+                            onOpenProject(project);
+                          } else {
+                            onLaunchPublicView(project.id);
+                          }
+                        }}
+                      >
+                        {/* Status Pill on Top-Left */}
+                        <div
+                          className="badge-thumb-topleft"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (user.role === 'admin') togglePublic(project);
+                          }}
+                          style={{ cursor: user.role === 'admin' ? 'pointer' : 'default' }}
+                          title={user.role === 'admin' ? 'Click to toggle Public / Private status' : undefined}
+                        >
+                          {!isCompleted ? (
+                            <span className="badge-draft-pill">📝 Draft</span>
+                          ) : project.is_public ? (
+                            <span className="badge-public-pill">
+                              <Globe size={11} /> Public
                             </span>
-                          </div>
-
-                          <div className="position-absolute top-0 start-0 m-3 z-2 d-flex gap-1.5 flex-wrap">
-                            {!isProjectCompleted(project) ? (
-                              <span className="badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-30 rounded-pill px-2.5 py-1.5 font-weight-normal">
-                                📝 Incomplete Draft
-                              </span>
-                            ) : (
-                              <span className="badge bg-success bg-opacity-25 text-success border border-success border-opacity-30 rounded-pill px-2.5 py-1.5 font-weight-normal">
-                                ✅ Ready
-                              </span>
-                            )}
-
-                            {project.is_public ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (user.role === 'admin') togglePublic(project);
-                                }}
-                                className="badge bg-info bg-opacity-25 text-info border border-info border-opacity-30 rounded-pill px-2.5 py-1.5 cursor-pointer text-decoration-none font-weight-normal"
-                              >
-                                🌐 Public
-                              </button>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (user.role === 'admin') togglePublic(project);
-                                }}
-                                className="badge   bg-opacity-25 text-warning border border-warning border-opacity-30 rounded-pill px-2.5 py-1.5 cursor-pointer text-decoration-none font-weight-normal"
-                              >
-                                🔒 Private
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Hover Launch Overlay */}
-                          <div
-                            onClick={() => {
-                              if (!isProjectCompleted(project)) {
-                                onOpenProject(project);
-                              } else {
-                                onLaunchPublicView(project.id);
-                              }
-                            }}
-                            className="project-card-header-overlay cursor-pointer"
-                          >
-                            <button className="btn btn-primary font-weight-normal rounded-3 px-4 py-2 small shadow-lg d-flex align-items-center gap-2">
-                              <Eye className="w-4 h-4" />
-                              <span>{!isProjectCompleted(project) ? '✏️ Resume in Studio' : 'Launch 360° Viewer'}</span>
-                            </button>
-                          </div>
+                          ) : (
+                            <span className="badge-private-pill">
+                              <Lock size={11} /> Private
+                            </span>
+                          )}
                         </div>
 
-                        {/* Card Body */}
-                        <div className="project-card-body">
-                          <div>
-                            <div className="d-flex align-items-start justify-content-between gap-2 mb-2">
-                              <h3 className="h5 font-weight-normal text-white mb-0">{project.name}</h3>
-                              {user.role === 'admin' && (
-                                <button
-                                  onClick={() => handleOpenEditModal(project)}
-                                  className="btn btn-sm btn-outline-primary py-1 px-2.5 rounded-3 small shrink-0 d-flex align-items-center gap-1 font-weight-normal"
-                                  title="Edit Title & Description"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                  <span>Edit</span>
-                                </button>
-                              )}
-                            </div>
+                        {thumbnail ? (
+                          <img
+                            src={thumbnail}
+                            alt={project.name}
+                            className="card-thumb-img"
+                          />
+                        ) : (
+                          <div className="card-thumb-fallback">
+                            <Compass size={36} />
+                            <span style={{ fontSize: '0.72rem', marginTop: '6px', opacity: 0.8 }}>360° Panorama</span>
+                          </div>
+                        )}
 
-                            {project.data?.description && (
-                              <p className="small text-secondary fst-italic bg-dark p-2.5 rounded-3 border border-secondary border-opacity-25 mb-2">
-                                "{project.data.description}"
-                              </p>
-                            )}
+                        {/* 360° Circular Badge on Bottom-Right */}
+                        <div className="badge-thumb-360">
+                          <span>360°</span>
+                        </div>
+                      </div>
 
-                            {project.client_name && (
-                              <p className="small text-secondary mb-0">
-                                Client: <strong className="text-white font-weight-normal">{project.client_name}</strong>
-                              </p>
-                            )}
+                      {/* Middle Content Details */}
+                      <div className="card-content-middle">
+                        <div className="card-title-row">
+                          <h3 className="card-title-heading">{project.name}</h3>
+                          <Sparkles size={16} className="card-sparkle-icon" />
+                        </div>
+
+                        <div className="card-info-item">
+                          <User size={14} />
+                          <span>Client: <strong style={{ color: '#ffffff', fontWeight: 600 }}>{project.client_name || user.name}</strong></span>
+                        </div>
+
+                        <div className="card-info-item">
+                          <Box size={14} />
+                          <span>{locationCount} Room{locationCount !== 1 ? 's' : ''} Configured</span>
+                        </div>
+
+                        <div className="card-info-item">
+                          <FileText size={14} />
+                          <span style={{ fontStyle: 'italic', opacity: 0.85 }}>{project.data?.description || 'No description provided'}</span>
+                        </div>
+
+                        {/* Meta Row: Created Date and Shareable Link */}
+                        <div className="card-meta-pills-row">
+                          <div className="meta-pill-tag">
+                            <Calendar size={13} />
+                            <span>Created: {formatProjectDate(project.created_at)}</span>
                           </div>
 
                           {user.role === 'admin' && (
-                            <div className="pt-3 border-top border-secondary border-opacity-25 d-flex align-items-center justify-content-between gap-2 mt-3">
-                              <div className="d-flex align-items-center gap-2">
-                                <button
-                                  onClick={() => onLaunchPublicView(project.id)}
-                                  className="btn btn-sm btn-primary rounded-3 px-3 d-flex align-items-center gap-1 font-weight-normal"
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                  <span>View 360°</span>
-                                </button>
-
-                                {user.role === 'admin' && (
-                                  <button
-                                    onClick={() => onOpenProject(project)}
-                                    className="btn btn-sm btn-outline-secondary text-white rounded-3 px-3 d-flex align-items-center gap-1"
-                                  >
-                                    <Compass className="w-3.5 h-3.5 text-info" />
-                                    <span>Edit in Studio</span>
-                                  </button>
-                                )}
-
-                                <button
-                                  onClick={() => copyShareLink(project.id)}
-                                  className="btn btn-sm btn-outline-secondary p-2 rounded-3"
-                                  title="Copy Share Link"
-                                >
-                                  {copiedId === project.id ? <Check className="w-3.5 h-3.5 text-success" /> : <Share2 className="w-3.5 h-3.5" />}
-                                </button>
-
-                                <button
-                                  onClick={() => handleExportZip(project)}
-                                  className="btn btn-sm btn-outline-success p-2 rounded-3"
-                                  title="Export Standalone Web Package (.ZIP)"
-                                >
-                                  <Archive className="w-3.5 h-3.5 text-success" />
-                                </button>
-                              </div>
-
-                              {user.role === 'admin' && (
-                                <button
-                                  onClick={() => deleteProject(project.id)}
-                                  className="btn btn-sm btn-outline-danger p-2 rounded-3"
-                                  title="Delete Project"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                            <button
+                              onClick={() => copyShareLink(project.id)}
+                              className="meta-pill-link-btn"
+                              title="Click to copy shareable public tour link"
+                            >
+                              {copiedId === project.id ? (
+                                <>
+                                  <Check size={13} style={{ color: '#34d399' }} />
+                                  <span style={{ color: '#34d399' }}>Link Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Link2 size={13} />
+                                  <span>Shareable Link</span>
+                                </>
                               )}
-                            </div>
+                            </button>
                           )}
                         </div>
+                      </div>
+
+                      {/* Right Action Buttons */}
+                      <div className="card-actions-right">
+                        <button
+                          onClick={() => onLaunchPublicView(project.id)}
+                          className="btn-view-360-primary"
+                          title="Open interactive 360° tour viewer"
+                        >
+                          <Eye size={16} />
+                          <span>View 360° Tour</span>
+                        </button>
+
+                        {user.role === 'admin' && (
+                          <button
+                            onClick={() => copyShareLink(project.id)}
+                            className="btn-action-square"
+                            title="Share 360° Tour Link"
+                          >
+                            {copiedId === project.id ? <Check size={16} style={{ color: '#34d399' }} /> : <Share2 size={16} />}
+                          </button>
+                        )}
+
+                        {user.role === 'admin' && (
+                          <button
+                            onClick={() => deleteProject(project.id)}
+                            className="btn-action-square btn-action-square-delete"
+                            title="Delete project"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -960,56 +972,51 @@ export default function ClientDashboard({
         </div>
       )}
 
-      {/* Edit Project Details Modal (Admin Panel Only) */}
-      {editingProject && user.role === 'admin' && (
+      {/* Edit Project Modal (Admin Only) */}
+      {editingProject && (
         <div className="custom-modal-overlay">
           <div className="custom-modal-dialog">
-            <button
-              onClick={() => setEditingProject(null)}
-              className="btn-close btn-close-white position-absolute top-0 end-0 m-4"
-            ></button>
-
-            <div className="d-flex align-items-center gap-3 mb-4">
-              <div className="kpi-icon-box bg-opacity-25 text-primary border border-primary border-opacity-30">
-                <Edit3 className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="h5 font-weight-normal text-white mb-0">Edit 360° Project Details</h3>
-                <p className="small text-secondary mb-0">Modify title, description & assigned client</p>
-              </div>
+            <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+              <h3 className="h5 text-white mb-0">Edit Tour Settings</h3>
+              <button
+                onClick={() => setEditingProject(null)}
+                className="btn btn-sm btn-outline-secondary p-1 border-0"
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            <form onSubmit={handleSaveProjectDetails}>
-              <div className="mb-3">
-                <label className="form-label small font-weight-normal text-secondary text-uppercase">Project Title *</label>
-                <input
-                  type="text"
-                  required
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="form-control bg-dark text-white border-secondary border-opacity-25 rounded-3"
-                />
-              </div>
+            <div className="mb-3">
+              <label className="form-label small text-secondary">Project Name</label>
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="form-control bg-dark text-white border-secondary border-opacity-50"
+                placeholder="e.g. Luxury Apartment 360"
+              />
+            </div>
 
-              <div className="mb-3">
-                <label className="form-label small font-weight-normal text-secondary text-uppercase">Project Description</label>
-                <textarea
-                  rows={4}
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  className="form-control bg-dark text-white border-secondary border-opacity-25 rounded-3"
-                  placeholder="Enter property details & features..."
-                />
-              </div>
+            <div className="mb-3">
+              <label className="form-label small text-secondary">Description / Tagline</label>
+              <textarea
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                className="form-control bg-dark text-white border-secondary border-opacity-50"
+                rows={3}
+                placeholder="Brief notes, amenities, highlights..."
+              ></textarea>
+            </div>
 
+            {user.role === 'admin' && (
               <div className="mb-3">
-                <label className="form-label small font-weight-normal text-secondary text-uppercase">Assigned Client Account</label>
+                <label className="form-label small text-secondary">Assign to Registered Client</label>
                 <select
                   value={editTargetUserId}
                   onChange={(e) => setEditTargetUserId(e.target.value)}
-                  className="form-select bg-dark text-white border-secondary border-opacity-25 rounded-3"
+                  className="form-select bg-dark text-white border-secondary border-opacity-50"
                 >
-                  <option value="">-- No Client Assigned (Unassigned) --</option>
+                  <option value="">-- No Specific Client (Admin / General) --</option>
                   {usersList.filter(u => u.role === 'client').map(u => (
                     <option key={u.id} value={u.id}>
                       {u.name} ({u.email})
@@ -1017,97 +1024,61 @@ export default function ClientDashboard({
                   ))}
                 </select>
               </div>
+            )}
 
-              <div className="d-flex align-items-center justify-content-between p-3 bg-dark rounded-3 border border-secondary border-opacity-25 mb-4">
-                <div>
-                  <span className="small font-weight-normal text-white d-block">Public Tour Link</span>
-                  <span className="small text-secondary">Allow public visitors to view without login</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEditIsPublic(!editIsPublic)}
-                  className={`btn btn-sm ${editIsPublic ? 'btn-success' : 'btn-warning text-dark'}`}
-                >
-                  {editIsPublic ? '🌐 Public' : '🔒 Private'}
-                </button>
+            <div className="mb-4">
+              <div className="form-check form-switch">
+                <input
+                  type="checkbox"
+                  id="editIsPublicSwitch"
+                  checked={editIsPublic}
+                  onChange={(e) => setEditIsPublic(e.target.checked)}
+                  className="form-check-input"
+                />
+                <label htmlFor="editIsPublicSwitch" className="form-check-label text-white small">
+                  {editIsPublic ? '🌐 Public Visibility (Available on shared links)' : '🔒 Private (Restricted to logged-in user)'}
+                </label>
               </div>
+            </div>
 
-              <div className="d-flex align-items-center justify-content-end gap-2 pt-3 border-top border-secondary border-opacity-25">
-                <button
-                  type="button"
-                  onClick={() => setEditingProject(null)}
-                  className="btn btn-secondary rounded-3 px-4"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingEdit || !editName.trim()}
-                  className="btn btn-primary rounded-3 px-4 font-weight-normal"
-                >
-                  {isSavingEdit ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
+            <div className="d-flex align-items-center justify-content-end gap-2 pt-2 border-top border-secondary border-opacity-25">
+              <button
+                onClick={() => setEditingProject(null)}
+                className="btn btn-sm btn-secondary text-white rounded-3 px-3"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={isSavingEdit}
+                className="btn btn-sm btn-primary rounded-3 px-4 font-weight-normal"
+                style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }}
+              >
+                {isSavingEdit ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Edit Client / User Details Modal */}
-      <EditUserModal
-        isOpen={!!editingUser}
-        user={editingUser}
-        token={token}
-        onClose={() => setEditingUser(null)}
-        onSuccess={(updated) => {
-          setUsersList(prev => prev.map(u => u.id === updated.id ? { ...u, ...updated } : u));
-          setToast({
-            message: `Updated account details for "${updated.name}"!`,
-            type: 'success'
-          });
-        }}
-      />
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '28px',
-            right: '28px',
-            zIndex: 99999,
-            background: 'linear-gradient(135deg, #1e1b4b, #0f172a)',
-            border: '1px solid rgba(99,102,241,0.5)',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.7), 0 0 15px rgba(99,102,241,0.35)',
-            borderRadius: '14px',
-            padding: '14px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            color: '#fff',
-            fontSize: '0.88rem',
-            fontWeight: 600,
-            animation: 'modalSlideIn 0.25s ease'
+      {/* Edit User Modal (Admin Only) */}
+      {editingUser && (
+        <EditUserModal
+          isOpen={!!editingUser}
+          user={editingUser}
+          token={token || localStorage.getItem('crm_token') || ''}
+          onClose={() => setEditingUser(null)}
+          onSuccess={() => {
+            fetchUsers();
+            fetchProjects();
           }}
-        >
-          <span style={{ fontSize: '1.2rem' }}>🗑️</span>
-          <span>{toast.message}</span>
-          <button
-            onClick={() => setToast(null)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#94a3b8',
-              cursor: 'pointer',
-              marginLeft: '8px',
-              padding: '2px',
-              display: 'flex',
-              alignItems: 'center'
-            }}
-          >
-            <X size={16} />
-          </button>
-        </div>
+        />
       )}
+
+      {/* Modern Dashboard Footer */}
+      <footer className="dashboard-copyright-footer">
+        © 2025 360 Virtual Tour Studio. All rights reserved.
+      </footer>
     </div>
   );
 }

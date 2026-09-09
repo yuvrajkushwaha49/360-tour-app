@@ -7,33 +7,27 @@ import {
   Play,
   Image as ImageIcon,
   RotateCw,
-  CheckCircle,
   Cpu,
   FileText,
   Layers,
   LogOut,
-  HelpCircle,
-  XCircle,
   Eye,
-  UserCheck,
   ShieldCheck,
   Database,
   LayoutDashboard,
   Globe,
-  Share2,
   Lock,
   Plus,
-  Edit2,
   Settings,
   CheckCircle2,
   X,
   Compass,
   UserPlus,
-  ArrowLeft,
   Home,
   Archive,
   Sliders,
-  Camera
+  Camera,
+  Bell
 } from 'lucide-react';
 import Viewer360 from './components/Viewer360';
 import LoginModal from './components/LoginModal';
@@ -167,6 +161,51 @@ export default function App() {
         }
       }
     });
+  }, []);
+
+  // Auto-route client on app startup / mount based on project count
+  useEffect(() => {
+    const checkClientProjectsOnStartup = async () => {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('tour') || urlParams.get('tourId')) return;
+      } catch (e) { }
+
+      const savedUserStr = localStorage.getItem('crm_user');
+      const savedToken = localStorage.getItem('crm_token');
+      if (!savedUserStr || !savedToken) return;
+
+      try {
+        const user = JSON.parse(savedUserStr);
+        if (user.role === 'client') {
+          const response = await fetch(`${API_BASE_URL}/api/projects`, {
+            headers: { Authorization: `Bearer ${savedToken}` }
+          });
+          if (response.ok) {
+            const clientProjects = await response.json();
+            if (Array.isArray(clientProjects)) {
+              if (clientProjects.length === 1) {
+                // If only 1 project -> Direct open tour
+                const singleTourId = clientProjects[0].id;
+                setActivePublicTourId(singleTourId);
+                localStorage.setItem('active_public_tour_id', singleTourId);
+                setActiveView('public_tour');
+                localStorage.setItem('active_view', 'public_tour');
+              } else if (clientProjects.length > 1) {
+                // If greater than 1 project -> Ensure Home Page (CRM) opens unless user is actively viewing a tour
+                const currentSavedView = localStorage.getItem('active_view');
+                if (currentSavedView !== 'public_tour') {
+                  setActiveView('crm');
+                  localStorage.setItem('active_view', 'crm');
+                }
+              }
+            }
+          }
+        }
+      } catch (e) { }
+    };
+
+    checkClientProjectsOnStartup();
   }, []);
 
   // Listen for clear-studio-draft event from Dashboard to reset in-memory draft
@@ -1343,13 +1382,39 @@ export default function App() {
     addLog(`💾 Project "${projName}" saved to file and synced to Home Page!`);
   };
 
-  const handleAuthSuccess = (user: { id: string; name: string; email: string; role: string }, token: string) => {
+  const handleAuthSuccess = async (user: { id: string; name: string; email: string; role: string }, token: string) => {
     setCurrentUser(user);
     setAuthToken(token);
     localStorage.setItem('crm_user', JSON.stringify(user));
     localStorage.setItem('crm_token', token);
 
-    // Always redirect to CRM Portal upon login
+    // If client user, check project count
+    if (user.role === 'client') {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/projects`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const clientProjects = await response.json();
+          if (Array.isArray(clientProjects) && clientProjects.length === 1) {
+            // Exactly 1 project -> Direct open tour
+            const singleTourId = clientProjects[0].id;
+            localStorage.removeItem(`active_public_loc_${singleTourId}`);
+            setActivePublicTourId(singleTourId);
+            localStorage.setItem('active_public_tour_id', singleTourId);
+            handleViewChange('public_tour');
+            addLog(`Logged in as ${user.name}. Auto-opening single assigned project "${clientProjects[0].name}"...`);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Error fetching client projects on login:', e);
+      }
+    }
+
+    // Greater than 1 project, 0 projects, or admin -> First open Home Page (CRM Portal)
+    localStorage.removeItem('active_public_tour_id');
+    setActivePublicTourId(null);
     handleViewChange('crm');
     addLog(`Logged in as ${user.name} (${user.role.toUpperCase()})`);
   };
@@ -1662,6 +1727,7 @@ export default function App() {
           setActivePublicTourId(null);
           handleViewChange('login');
         }}
+        onLogout={handleLogout}
       />
     );
   }
@@ -1676,32 +1742,18 @@ export default function App() {
       <nav className="studio-navbar navbar navbar-dark bg-dark px-3 py-2 border-bottom border-secondary border-opacity-25 flex-nowrap overflow-x-auto">
         <div className="d-flex align-items-center gap-3 shrink-0">
           <button
-            onClick={async () => {
-              if (!currentUser || !authToken) {
-                try {
-                  const loginRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: 'admin@360soft.com', password: 'admin123' })
-                  });
-                  if (loginRes.ok) {
-                    const authData = await loginRes.json();
-                    setAuthToken(authData.token);
-                    setCurrentUser(authData.user);
-                    localStorage.setItem('crm_token', authData.token);
-                    localStorage.setItem('crm_user', JSON.stringify(authData.user));
-                    handleViewChange('crm');
-                    return;
-                  }
-                } catch (e) { }
-              }
-              handleViewChange(currentUser ? 'crm' : 'login');
+            onClick={() => handleViewChange('crm')}
+            className="btn btn-sm text-white rounded-pill px-3 d-flex align-items-center gap-1.5 shadow-sm"
+            style={{
+              background: 'rgba(255, 255, 255, 0.06)',
+              border: '1px solid rgba(99, 102, 241, 0.35)',
+              fontSize: '0.8rem',
+              fontWeight: 600
             }}
-            className="btn btn-sm btn-outline-secondary text-white rounded-3 px-3 d-flex align-items-center gap-1 shadow-sm"
             title="Go to Home Page / Dashboard"
           >
-            <Home className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="small font-weight-normal">Home Page</span>
+            <Home size={14} className="text-indigo-400" />
+            <span>Home Page</span>
           </button>
 
           <div className="d-flex align-items-center gap-2">
@@ -1808,19 +1860,75 @@ export default function App() {
             </>
           )}
 
-          {/* User Account / Auth Section */}
-          <div className="ps-3 border-start border-secondary border-opacity-25 d-flex align-items-center gap-2">
+          {/* User Account & Notifications Section */}
+          <div className="ps-3 border-start border-secondary border-opacity-25 d-flex align-items-center gap-3">
+            {/* Notification Bell */}
+            <button
+              className="btn btn-sm p-1.5 border-0 text-secondary position-relative"
+              style={{ background: 'transparent', cursor: 'pointer' }}
+              title="Notifications"
+            >
+              <Bell size={18} />
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '6px',
+                  right: '6px',
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  background: '#818cf8',
+                  boxShadow: '0 0 8px #818cf8'
+                }}
+              ></span>
+            </button>
 
             {currentUser ? (
-              <div className="d-flex align-items-center gap-2 bg-secondary bg-opacity-25 px-3 py-1.5 rounded-3 border border-secondary border-opacity-25">
-                <UserCheck className="w-4 h-4 text-success" />
-                <span className="small text-white font-weight-normal">{currentUser.name} ({currentUser.role})</span>
+              <div
+                className="d-flex align-items-center gap-2.5 px-3 py-1.5 rounded-pill"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}
+              >
+                {/* Purple Circular Initial Avatar */}
+                <div
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    boxShadow: '0 2px 8px rgba(124, 58, 237, 0.5)'
+                  }}
+                >
+                  {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+
+                {/* Name & Online Status */}
+                <div className="d-flex flex-column" style={{ lineHeight: 1.15 }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#ffffff' }}>
+                    {currentUser.name} <span style={{ color: '#94a3b8', fontWeight: 400 }}>({currentUser.role})</span>
+                  </span>
+                  <div className="d-flex align-items-center gap-1.5" style={{ marginTop: '2px' }}>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block', boxShadow: '0 0 6px #22c55e' }}></span>
+                    <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Online</span>
+                  </div>
+                </div>
+
+                {/* Sign Out Button */}
                 <button
                   onClick={handleLogout}
                   title="Sign Out"
                   className="btn btn-sm text-secondary p-0 ms-1 border-0"
+                  style={{ cursor: 'pointer' }}
                 >
-                  <LogOut className="w-3.5 h-3.5 text-danger" />
+                  <LogOut size={14} className="text-danger" />
                 </button>
               </div>
             ) : (
@@ -3592,6 +3700,7 @@ export default function App() {
         <PublicTourViewer
           tourId={activePublicTourId}
           onBack={() => setActivePublicTourId(null)}
+          onLogout={handleLogout}
         />
       )}
 

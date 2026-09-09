@@ -398,6 +398,16 @@
   transform: translateX(3px);
 }
 
+.smart-logout-menu-item:hover {
+  background: rgba(239, 68, 68, 0.12) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+.smart-logout-menu-item:hover .smart-menu-icon {
+  background: rgba(239, 68, 68, 0.3) !important;
+  color: #ef4444 !important;
+}
+
 .smart-menu-icon {
   width: 1.85rem;
   height: 1.85rem;
